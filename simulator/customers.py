@@ -57,8 +57,13 @@ class BaseCustomer(AbstractCustomer):
 
     def get_local_datetime(self):
         # convert global to local date (first add global timezone info, then convert to local)
-        local_datetime = self.model.curr_global_date
-        local_datetime = local_datetime.astimezone(timezone(country_timezones(self.country)[0]))
+        if self.country in self.model.curr_local_dates:
+            local_datetime = self.model.curr_local_dates[self.country]
+        else:
+            local_datetime = self.model.curr_global_date
+            local_datetime = local_datetime.astimezone(timezone(country_timezones(self.country)[0]))
+            self.model.curr_local_dates[self.country] = local_datetime
+
         return local_datetime
 
     def get_curr_merchant(self):

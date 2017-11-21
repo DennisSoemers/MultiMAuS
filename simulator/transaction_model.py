@@ -31,6 +31,7 @@ class TransactionModel(Model):
 
         # current date
         self.curr_global_date = self.parameters['start_date']
+        self.curr_local_dates = {}
 
         # set termination status
         self.terminated = False
@@ -98,7 +99,10 @@ class TransactionModel(Model):
         self.customer_migration()
 
         # update time
-        self.curr_global_date = self.curr_global_date + timedelta(hours=1)
+        one_hour = timedelta(hours=1)
+        self.curr_global_date = self.curr_global_date + one_hour
+        for country, curr_local_date in self.curr_local_dates.items():
+            self.curr_local_dates[country] = curr_local_date + one_hour
 
         # check if termination criterion met
         if self.curr_global_date.date() > self.parameters['end_date'].date():
