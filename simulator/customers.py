@@ -48,12 +48,24 @@ class BaseCustomer(AbstractCustomer):
         trans_prob = self.avg_trans_per_hour
 
         # now weigh by probabilities of transactions per month/week/...
+        '''
+        This is the readable version of code:
+
         trans_prob *= 12 * self.trans_prob_month[self.local_datetime.month - 1]
         trans_prob *= 24 * self.trans_prob_hour[self.local_datetime.hour]
         trans_prob *= 30.5 * self.trans_prob_monthday[self.local_datetime.day - 1]
         trans_prob *= 7 * self.trans_prob_weekday[self.local_datetime.weekday()]
 
         return trans_prob
+        '''
+
+        # this is less readable, but more efficient (optimized because it showed up high in profiler)
+        # 12 * 24 * 30.5 * 7 = 61488.0
+        return trans_prob * 61488.0 * \
+               self.trans_prob_month[self.local_datetime.month - 1] * \
+               self.trans_prob_hour[self.local_datetime.hour] * \
+               self.trans_prob_monthday[self.local_datetime.day - 1] * \
+               self.trans_prob_weekday[self.local_datetime.weekday()]
 
     def get_local_datetime(self):
         # convert global to local date (first add global timezone info, then convert to local)
