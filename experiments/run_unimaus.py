@@ -25,7 +25,7 @@ def run_single():
     print('simulation took ', round((time.time() - start_time)/60., 2), ' minutes')
 
     # make sure we didn't accidentally changed the default parameters
-    result_handling.check_parameter_consistency(params)
+    #result_handling.check_parameter_consistency(params)
 
     # save the results
     result_handling.save_results(model)

@@ -6,6 +6,7 @@ from mesa import Model
 from authenticators.simple_authenticators import NeverSecondAuthenticator
 from simulator.customers import GenuineCustomer, FraudulentCustomer
 from datetime import timedelta
+from pytz import timezone, country_timezones
 import numpy as np
 
 
@@ -99,10 +100,9 @@ class TransactionModel(Model):
         self.customer_migration()
 
         # update time
-        one_hour = timedelta(hours=1)
-        self.curr_global_date = self.curr_global_date + one_hour
-        for country, curr_local_date in self.curr_local_dates.items():
-            self.curr_local_dates[country] = curr_local_date + one_hour
+        self.curr_global_date = self.curr_global_date + timedelta(hours=1)
+        for country in self.curr_local_dates.keys():
+            self.curr_local_dates[country] = self.curr_global_date.astimezone(timezone(country_timezones(country)[0]))
 
         # check if termination criterion met
         if self.curr_global_date.date() > self.parameters['end_date'].date():
