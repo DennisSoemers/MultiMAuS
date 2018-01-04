@@ -8,14 +8,82 @@ Hopefully it will require few changes in the simulator's own code, but some will
 import numpy as np
 import pandas as pd
 
+from authenticators.abstract_authenticator import AbstractAuthenticator
 from collections import defaultdict
 
 
-class RLAuthenticator:
+class RLAuthenticator(AbstractAuthenticator):
 
-    def __init__(self, agent, state_creator):
+    def __init__(self, agent, state_creator, flat_fee=0.01, relative_fee=0.01):
         self.agent = agent
         self.state_creator = state_creator
+        self.flat_fee = flat_fee
+        self.relative_fee = relative_fee
+
+    def authorise_transaction(self, customer):
+        state_features = self.state_creator.compute_state_vector_from_raw(customer)
+        action = self.agent.choose_action_eps_greedy(state_features)
+        success = True
+
+        if action == 1:
+            # ask secondary authentication
+            authentication = customer.give_authentication()
+
+            if authentication is None:
+                # customer refused to authenticate --> reward = 0
+                reward = 0
+                success = False
+            else:
+                # successful secondary authentication, so we know for sure it's a genuine transaction
+                reward = self.compute_fees(state_features[1])
+        else:
+            # did not ask for secondary authentication, will by default assume always a successful genuine transaction
+            reward = self.compute_fees(state_features[1])
+
+        time_since_last_transaction = state_features[2]
+        if time_since_last_transaction > 0:
+            # divide reward by time since last transaction, because rewards in episodes with infrequent rewards are
+            # less important than rewards in episodes with frequent rewards
+            reward /= time_since_last_transaction
+
+        # take a learning step
+        self.agent.learn(state_features, action, reward)
+
+        return success
+
+    def compute_fees(self, amount):
+        return self.flat_fee + self.relative_fee * amount
+
+    def update_fraudulent(self, transaction):
+        """
+        Updates the RL agent with new information that the given transaction turns out to be fraudulent.
+        This transaction will have been used for an update where it was assumed to be genuine in the past (with
+        a positive reward). So, in this update, we take the true negative reward of a fraudulent transaction, but
+        ALSO subtract the reward that we previously mistakenly added.
+
+        This can only be called for transactions that did not go through secondary authentication, so we know
+        the action that we need to update for will always be 0.
+
+            TODO probably want to rethink what we do with eligibility traces here.
+            or maybe not? if a fraudulent transaction got through, that same customer would probably wish
+            we'd been a bit more strict in general, also for all of his genuine transactions?
+
+        :param transaction:
+        :return:
+        """
+        state_features = self.state_creator.compute_state_vector_from_features(transaction)
+
+        # we lose (= negative reward) the full transaction amount, and the fees we previously mistakenly assumed to
+        # have been rewards
+        reward = -(state_features[1] + self.compute_fees(state_features[1]))
+
+        time_since_last_transaction = state_features[2]
+        if time_since_last_transaction > 0:
+            # divide reward by time since last transaction, because rewards in episodes with infrequent rewards are
+            # less important than rewards in episodes with frequent rewards
+            reward /= time_since_last_transaction
+
+        self.agent.learn(state_features=state_features, action=0, reward=reward)
 
 
 class StateCreator:
@@ -24,9 +92,9 @@ class StateCreator:
         self.trained_models = trained_models
         self.feature_processing_func = feature_processing_func
 
-        self.num_state_features = 0  # TODO properly compute this
+        self.num_state_features = 3  # TODO properly compute this
 
-    def compute_feature_vector(self, customer):
+    def compute_state_vector_from_raw(self, customer):
         """
         Uses the given customer's current properties to create a feature vector.
 
@@ -53,7 +121,8 @@ class StateCreator:
             "Target": lambda c: c.fraudster,
             "AuthSteps": lambda c: c.curr_auth_step,
             "TransactionCancelled": lambda c: c.curr_trans_cancelled,
-            "TransactionSuccessful": lambda c: not c.curr_trans_cancelled
+            "TransactionSuccessful": lambda c: not c.curr_trans_cancelled,
+            "TimeSinceLastTransaction": lambda c: c.time_since_last_transaction
         }
 
         agent_vars = {}
@@ -79,13 +148,26 @@ class StateCreator:
 
         # use functor to add useful features to this single-row dataframe
         df_with_features = self.feature_processing_func(raw_transaction_df)
+        transaction_row = df_with_features.iloc[0]
 
         # we don't want to use all of the features above for the Reinforcement Learner, but we do want to pass
         # them into offline trained models and use their outputs as features
+        return self.compute_state_vector_from_features(transaction_row)
+
+    def compute_state_vector_from_features(self, feature_vector):
+        """
+        Computes state vector from a vector with features
+
+        :param feature_vector:
+        :return:
+        """
         state_features = []
 
-        # TODO append features to the above list
+        state_features.append(1.0)  # intercept
+        state_features.append(feature_vector["Amount"])
+        state_features.append(feature_vector["TimeSinceLastTransaction"])
 
+        assert len(self.num_state_features) == len(state_features)
         return np.array(state_features)
 
     def get_num_state_features(self):

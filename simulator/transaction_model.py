@@ -54,19 +54,23 @@ class TransactionModel(Model):
     @staticmethod
     def initialise_log_collector():
         return LogCollector(
-            agent_reporters={"Global_Date": lambda c: c.model.curr_global_date.replace(tzinfo=None),
-                             "Local_Date": lambda c: c.local_datetime.replace(tzinfo=None),
-                             "CardID": lambda c: c.card_id,
-                             "MerchantID": lambda c: c.curr_merchant.unique_id,
-                             "Amount": lambda c: c.curr_amount,
-                             "Currency": lambda c: c.currency,
-                             "Country": lambda c: c.country,
-                             "Target": lambda c: c.fraudster,
-                             "AuthSteps": lambda c: c.curr_auth_step,
-                             "TransactionCancelled": lambda c: c.curr_trans_cancelled,
-                             "TransactionSuccessful": lambda c: not c.curr_trans_cancelled},
+            agent_reporters={
+                "Global_Date": lambda c: c.model.curr_global_date.replace(tzinfo=None),
+                "Local_Date": lambda c: c.local_datetime.replace(tzinfo=None),
+                "CardID": lambda c: c.card_id,
+                "MerchantID": lambda c: c.curr_merchant.unique_id,
+                "Amount": lambda c: c.curr_amount,
+                "Currency": lambda c: c.currency,
+                "Country": lambda c: c.country,
+                "Target": lambda c: c.fraudster,
+                "AuthSteps": lambda c: c.curr_auth_step,
+                "TransactionCancelled": lambda c: c.curr_trans_cancelled,
+                "TransactionSuccessful": lambda c: not c.curr_trans_cancelled,
+                "TimeSinceLastTransaction": lambda c: c.time_since_last_transaction,
+            },
             model_reporters={
-                "Satisfaction": lambda m: sum((customer.satisfaction for customer in m.customers)) / len(m.customers)})
+                "Satisfaction": lambda m: sum((customer.satisfaction for customer in m.customers)) / len(m.customers)
+            })
 
     def inform_attacked_customers(self):
         fraud_card_ids = [f.card_id for f in self.fraudsters if f.active and f.curr_trans_success]
@@ -78,11 +82,11 @@ class TransactionModel(Model):
     def step(self):
 
         # print some logs every mont
-        if self.curr_global_date.month != (self.curr_global_date - timedelta(hours=1)).month:
-            print(self.curr_global_date.date())
-            print('num customers:', len(self.customers))
-            print('num fraudsters:', len(self.fraudsters))
-            print('')
+        #if self.curr_global_date.month != (self.curr_global_date - timedelta(hours=1)).month:
+        #    print(self.curr_global_date.date())
+        #    print('num customers:', len(self.customers))
+        #    print('num fraudsters:', len(self.fraudsters))
+        #    print('')
 
         # this calls the step function of each agent in the schedule (customer, fraudster)
         self.schedule.agents = []
@@ -109,7 +113,7 @@ class TransactionModel(Model):
             self.terminated = True
 
     def process_transaction(self, customer):
-        self.authenticator.authorise_transaction(customer)
+        return self.authenticator.authorise_transaction(customer)
 
     def customer_migration(self):
 

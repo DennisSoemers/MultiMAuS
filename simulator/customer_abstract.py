@@ -39,6 +39,8 @@ class AbstractCustomer(Agent,  metaclass=ABCMeta):
         self.curr_trans_cancelled = False
         self.curr_trans_success = False
 
+        self.time_since_last_transaction = 0
+
         # variable tells us whether the customer wants to stay after current transaction
         self.stay = True
 
@@ -69,6 +71,15 @@ class AbstractCustomer(Agent,  metaclass=ABCMeta):
             # process current transaction
             self.curr_trans_success = self.model.process_transaction(self)
 
+            if not self.curr_trans_success:
+                self.active = False
+
+                # did not complete transaction, so update time since last transaction
+                self.time_since_last_transaction += 1
+            else:
+                # completed transaction, so reset time since last transaction
+                self.time_since_last_transaction = 1
+
             # if necessary post-process the transaction
             self.post_process_transaction()
 
@@ -79,6 +90,10 @@ class AbstractCustomer(Agent,  metaclass=ABCMeta):
             self.curr_merchant = None
             self.curr_amount = None
             self.local_datetime = None
+
+            # update time since last transaction
+            if self.time_since_last_transaction != 0:
+                self.time_since_last_transaction += 1
 
     def request_transaction(self):
         self.model.authorise_transaction(self)

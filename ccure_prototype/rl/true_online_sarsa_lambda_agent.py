@@ -76,7 +76,7 @@ class TrueOnlineSarsaLambdaAgent:
             best_actions = []
 
             for a in self.num_actions:
-                x = self.tate_action_feature_vector(state_features, a)
+                x = self.state_action_feature_vector(state_features, a)
                 q = self.q_value(x)
 
                 if q > best_q:

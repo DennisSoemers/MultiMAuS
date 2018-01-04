@@ -58,7 +58,10 @@ simulator_params = parameters.get_default_parameters()
 simulator_params['end_date'] = datetime(9999, 12, 31)
 simulator_params['stay_prob'][0] = 0.9      # stay probability for genuine customers
 simulator_params['stay_prob'][1] = 0.99     # stay probability for fraudsters
-simulator_params['seed'] = random.randrange(sys.maxsize)
+simulator_params['seed'] = random.randrange(2**32)
+
+# we assume fraudulent cases get reported after 6 simulator steps (hours)   TODO can make this much more fancy
+FRAUD_REPORT_TIME = 6
 
 
 '''
@@ -208,8 +211,11 @@ def process_data(data):
                "AuthSteps", "TransactionCancelled", "TransactionSuccessful"],
               inplace=True, axis=1)
 
-    # move CardID and Target columns to the end
-    data = data[[col for col in data if col != "Target" and col != "CardID"] + ["CardID", "Target"]]
+    # move CardID, TimeSinceLastTransaction, and Target columns to the end
+    data = data[
+        [col for col in data if col != "Target" and col != "CardID" and col != "TimeSinceLastTransaction"] +
+        ["CardID", "TimeSinceLastTransaction", "Target"]
+    ]
 
     return data
 
@@ -240,6 +246,9 @@ if __name__ == '__main__':
     for t in range(NUM_SIM_STEPS_TRAINING_DATA):
         simulator.step()
 
+        if t % 1000 == 0:
+            print("Finished simulation step ", t)
+
     training_data = get_log(clear_after=True)
     num_training_instances = training_data.shape[0]
     num_feature_learning_instances = int(num_training_instances * TRAIN_FEATURE_ENGINEERING_RATIO)
@@ -258,6 +267,8 @@ if __name__ == '__main__':
 
     # compute features for our model learning data
     model_learning_data = process_data(model_learning_data)
+    print("generated features for model learning data")
+
     # TODO train any offline models that need to be trained on this data
 
     trained_models = []     # TODO add them to this list
@@ -280,6 +291,8 @@ if __name__ == '__main__':
     # can still use the skip data to update our feature engineering
     update_feature_constructors_unlabeled(skip_data)
 
+    print("Finished generating gap data")
+
     # allow all training and skip data to be cleaned from memory
     # (may not actually matter since AggregateFeatures keeps them all stored anyway)
     training_data = None
@@ -294,9 +307,18 @@ if __name__ == '__main__':
         state_creator=state_creator)
     simulator.authenticator = authenticator_test_phase
 
-    # TODO idea: shared Q-learner, customer-specific action sequences, decay rewards by time since last transaction?
+    # in this dict, we'll store for simulation steps (key = t) lists of transactions that need to be reported
+    # at that time
+    to_report = {}
 
     for t in range(NUM_SIM_STEPS_EVALUATION):
+        # process any transactions that get reported and turn out to be fraudulent at this time
+        if t in to_report:
+            transactions_to_report = to_report.pop(t)
+
+            for transaction in transactions_to_report:
+                authenticator_test_phase.update_fraudulent(transaction)
+
         # a single simulator step
         simulator.step()
 
@@ -306,5 +328,13 @@ if __name__ == '__main__':
         # use it for unlabeled feature updates
         update_feature_constructors_unlabeled(new_data)
 
-        # for transaction in new_data.itertuples():
+        for transaction in new_data.itertuples():
+            if transaction["Target"] == 1:
+                # fraudulent transaction, report it FRAUD_REPORT_TIME sim-steps from now
+                if t + FRAUD_REPORT_TIME in to_report:
+                    to_report[t + FRAUD_REPORT_TIME].append(transaction)
+                else:
+                    to_report[t + FRAUD_REPORT_TIME] = [transaction, ]
 
+        if t % 1000 == 0:
+            print("Finished simulation step ", t)
