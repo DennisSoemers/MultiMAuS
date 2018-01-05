@@ -10,8 +10,9 @@ Many other people also contributed to the project from
 Vrije Universiteit Brussel (AI Lab and BUTO) and Université Catholique de Louvain (Crypto Group)
 """
 
+import atexit
 import random
-import sys
+import numpy as np
 from datetime import datetime
 from mesa.time import BaseScheduler
 
@@ -23,6 +24,20 @@ from data.features.aggregate_features import AggregateFeatures
 from data.features.apate_graph_features import ApateGraphFeatures
 from simulator import parameters
 from simulator.transaction_model import TransactionModel
+
+
+# want stack trace when warnings are raised
+#np.seterr(all='raise')
+
+
+@atexit.register
+def notify():
+    """
+    Make some noise when we crash / terminate (ONLY WORKS ON WINDOWS)
+    """
+    import winsound
+    winsound.Beep(440, 500)
+
 
 '''
 --------------------------------------------------------------------------------------
@@ -36,17 +51,20 @@ Configuration
 # -------------------------------------------
 # authenticator to use during the phase where we generate training / skip data
 authenticator_training_phase = NeverSecondAuthenticator()
+authenticator_test_phase = None
 
 # -------------------------------------------
 # experiment setup
 # -------------------------------------------
 # number of steps to simulate to generate training data
-NUM_SIM_STEPS_TRAINING_DATA = 20_000
+#NUM_SIM_STEPS_TRAINING_DATA = 20_000
+NUM_SIM_STEPS_TRAINING_DATA = 1000
 # ratio out of training data to use for feature engineering (necessary to learn how to create APATE graph features)
 TRAIN_FEATURE_ENGINEERING_RATIO = 0.25
 
 # number of steps to simulate and discard afterwards to create gap between training and test data
-NUM_SIM_STEPS_SKIP = 5_000
+#NUM_SIM_STEPS_SKIP = 5_000
+NUM_SIM_STEPS_SKIP = 500
 
 # number of steps to simulate for evaluation
 NUM_SIM_STEPS_EVALUATION = 30_000
@@ -187,6 +205,11 @@ def get_log(clear_after=True):
     return log
 
 
+def on_customer_leave(card_id):
+    if authenticator_test_phase is not None:
+        authenticator_test_phase.agent.on_customer_leave(card_id)
+
+
 # -------------------------------------------
 # feature engineering
 # -------------------------------------------
@@ -242,6 +265,8 @@ if __name__ == '__main__':
                                  authenticator=authenticator_training_phase,
                                  scheduler=BaseScheduler(None))   # NOTE: not using random agent schedule
 
+    simulator.customer_leave_callbacks.append(on_customer_leave)
+
     # generate training data
     for t in range(NUM_SIM_STEPS_TRAINING_DATA):
         simulator.step()
@@ -276,8 +301,8 @@ if __name__ == '__main__':
     # get rid of all fraudsters in training data and replace them with new fraudsters
     fraudster_ids = set()
     for transaction in training_data.itertuples():  # this loops through feature and model learning data at once
-        if transaction["Target"] == 1:
-            fraudster_ids.add(transaction["CardID"])
+        if transaction.Target == 1:
+            fraudster_ids.add(transaction.CardID)
 
     block_cards(list(fraudster_ids), replace_fraudsters=True)
     fraudster_ids = None    # clean memory
@@ -325,16 +350,17 @@ if __name__ == '__main__':
         # dataframe for the latest step (can contain multiple transactions generated in same simulator step)
         new_data = get_log(clear_after=True)
 
-        # use it for unlabeled feature updates
-        update_feature_constructors_unlabeled(new_data)
+        if new_data is not None:
+            # use it for unlabeled feature updates
+            update_feature_constructors_unlabeled(new_data)
 
-        for transaction in new_data.itertuples():
-            if transaction["Target"] == 1:
-                # fraudulent transaction, report it FRAUD_REPORT_TIME sim-steps from now
-                if t + FRAUD_REPORT_TIME in to_report:
-                    to_report[t + FRAUD_REPORT_TIME].append(transaction)
-                else:
-                    to_report[t + FRAUD_REPORT_TIME] = [transaction, ]
+            for transaction in new_data.itertuples():
+                if transaction.Target == 1:
+                    # fraudulent transaction, report it FRAUD_REPORT_TIME sim-steps from now
+                    if t + FRAUD_REPORT_TIME in to_report:
+                        to_report[t + FRAUD_REPORT_TIME].append(transaction)
+                    else:
+                        to_report[t + FRAUD_REPORT_TIME] = [transaction, ]
 
         if t % 1000 == 0:
             print("Finished simulation step ", t)

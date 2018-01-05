@@ -23,6 +23,9 @@ import math
 import numpy as np
 import pandas as pd
 
+pd.options.mode.chained_assignment = None  # default='warn'
+
+
 class AggregateFeatures:
 
     def __init__(self, training_data):
@@ -209,6 +212,9 @@ class AggregateFeatures:
             row_card_id = row.CardID
 
             # select all training data with correct Card ID, and with a date earlier than row
+            if row_card_id not in transactions_by_card_ids:
+                continue
+
             card_transactions = transactions_by_card_ids[row_card_id]
             matching_data = extract_transactions_before(card_transactions, row_date)
 
@@ -306,6 +312,9 @@ class AggregateFeatures:
             row_card_id = row.CardID
 
             # select all training data with correct Card ID, and with a date earlier than row
+            if row_card_id not in transactions_by_card_ids:
+                continue
+
             card_transactions = transactions_by_card_ids[row_card_id]
             matching_data = extract_transactions_before(card_transactions, row_date)
 

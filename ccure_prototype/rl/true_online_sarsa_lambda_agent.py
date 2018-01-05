@@ -59,14 +59,14 @@ import numpy as np
 
 class TrueOnlineSarsaLambdaAgent:
 
-    def __init__(self, num_actions, num_state_features, gamma=0.99, alpha=0.05, lambda_=0.9):
+    def __init__(self, num_actions, num_state_features, gamma=0.99, alpha=0.0000005, lambda_=0.9):
         self.num_actions = num_actions
         self.gamma = gamma
         self.alpha = alpha      # TODO decaying learning rate schedule
         self.lambda_ = lambda_
 
         self.weights = np.zeros(num_actions * num_state_features)   # TODO different initialization
-        self.z = np.zeros(num_actions * num_state_features)     # dutch traces
+        self.z_map = {}     # for every customer a separate vector of dutch traces in this dictionary
 
     def choose_action_eps_greedy(self, state_features, epsilon=0.05):       # TODO decaying epsilon
         if np.random.random_sample() < epsilon:
@@ -75,9 +75,10 @@ class TrueOnlineSarsaLambdaAgent:
             best_q = -1000000
             best_actions = []
 
-            for a in self.num_actions:
+            for a in range(self.num_actions):
                 x = self.state_action_feature_vector(state_features, a)
                 q = self.q_value(x)
+                print("Q = ", q)
 
                 if q > best_q:
                     best_q = q
@@ -85,9 +86,12 @@ class TrueOnlineSarsaLambdaAgent:
                 elif q == best_q:
                     best_actions.append(a)
 
-            return best_actions[int(np.random.random_sample() * len(best_actions))]
+            idx = int(np.random.random_sample() * len(best_actions))
+            print("idx = ", idx)
+            print("len(best_actions) = ", len(best_actions))
+            return best_actions[idx]
 
-    def learn(self, state_features, action, reward):
+    def learn(self, state_features, action, reward, card_id):
         """
         Take a learning / update step. Note that we don't incorporate the next state
         and next action, as would normally be done in True Online Sarsa(lambda). See
@@ -99,15 +103,34 @@ class TrueOnlineSarsaLambdaAgent:
             Action we took in the given state
         :param reward:
             Single-step reward
+        :param card_id:
+            Card ID of the customer (required for customer-specific dutch traces)
         """
+        print("learning from reward = ", reward)
         x = self.state_action_feature_vector(state_features, action)
         Q = self.q_value(x)
         delta = reward - Q  # in standard implementation of algorithm, this would include +gamma*Q', which we set to 0
-        self.z = self.gamma * self.lambda_ * self.z + \
-                 (1.0 - self.alpha * self.gamma * self.lambda_ * np.dot(self.z, x)) * x
+        print("Q = ", Q)
+        print("delta = ", delta)
+
+        if card_id in self.z_map:
+            z = self.z_map[card_id]
+        else:
+            z = np.zeros(self.num_actions * len(state_features))
+
+        z = self.gamma * self.lambda_ * z + \
+            (1.0 - self.alpha * self.gamma * self.lambda_ * np.dot(z, x)) * x
 
         # the following line would normally twice include Q_old, which is always 0 in our case
-        self.weights = self.weights + self.alpha * (delta + Q) * self.z - self.alpha * Q * x
+        print("updating weights from ", self.weights)
+        self.weights = self.weights + self.alpha * (delta + Q) * z - self.alpha * Q * x
+        print("... to ", self.weights)
+        print("new Q estimate = ", self.q_value(x))
+
+        self.z_map[card_id] = z
+
+    def on_customer_leave(self, card_id):
+        self.z_map.pop(card_id)
 
     def q_value(self, x):
         """
@@ -132,7 +155,7 @@ class TrueOnlineSarsaLambdaAgent:
             State-action feature vector
         """
         x = []
-        for a in self.num_actions:
+        for a in range(self.num_actions):
             if a == action:
                 x = np.append(x, state_features)
             else:

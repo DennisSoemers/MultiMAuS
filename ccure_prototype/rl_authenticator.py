@@ -47,7 +47,7 @@ class RLAuthenticator(AbstractAuthenticator):
             reward /= time_since_last_transaction
 
         # take a learning step
-        self.agent.learn(state_features, action, reward)
+        self.agent.learn(state_features, action, reward, customer.card_id)
 
         return success
 
@@ -83,7 +83,7 @@ class RLAuthenticator(AbstractAuthenticator):
             # less important than rewards in episodes with frequent rewards
             reward /= time_since_last_transaction
 
-        self.agent.learn(state_features=state_features, action=0, reward=reward)
+        self.agent.learn(state_features=state_features, action=0, reward=reward, card_id=transaction.CardID)
 
 
 class StateCreator:
@@ -164,10 +164,10 @@ class StateCreator:
         state_features = []
 
         state_features.append(1.0)  # intercept
-        state_features.append(feature_vector["Amount"])
-        state_features.append(feature_vector["TimeSinceLastTransaction"])
+        state_features.append(feature_vector.Amount)
+        state_features.append(feature_vector.TimeSinceLastTransaction)
 
-        assert len(self.num_state_features) == len(state_features)
+        assert self.num_state_features == len(state_features)
         return np.array(state_features)
 
     def get_num_state_features(self):

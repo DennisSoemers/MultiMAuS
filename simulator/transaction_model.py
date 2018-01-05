@@ -51,6 +51,13 @@ class TransactionModel(Model):
         # we add to the log collector whether transaction was successful
         self.log_collector = self.initialise_log_collector()
 
+        self.customer_leave_callbacks = []
+
+    def customer_leave_callback(self, card_id):
+        if card_id is not None:
+            for callback in self.customer_leave_callbacks:
+                callback(card_id)
+
     @staticmethod
     def initialise_log_collector():
         return LogCollector(

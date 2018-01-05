@@ -95,6 +95,9 @@ class AbstractCustomer(Agent,  metaclass=ABCMeta):
             if self.time_since_last_transaction != 0:
                 self.time_since_last_transaction += 1
 
+        if not self.stay:
+            self.model.customer_leave_callback(self.card_id)
+
     def request_transaction(self):
         self.model.authorise_transaction(self)
 

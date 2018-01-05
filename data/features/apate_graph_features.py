@@ -34,9 +34,12 @@ this procedure can provide useful scores related to how ''risky'' they are.
 """
 
 import math
+import pandas as pd
 from datetime import datetime
 from scipy.sparse import coo_matrix
 from scipy.sparse import diags
+
+pd.options.mode.chained_assignment = None  # default='warn'
 
 
 class ApateGraphFeatures:
