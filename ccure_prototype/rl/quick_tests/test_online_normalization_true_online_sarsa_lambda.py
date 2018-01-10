@@ -17,9 +17,9 @@ if __name__ == '__main__':
     unnormalized_feature_vectors = [
         [1, 1, 20, 300],
         [1, 0.5, 30, -100],
-        [1, -1.1, 50, 123],
         [1, 1.1, -18, -225],
-        [1, 0.7, -40, 200]
+        [1, -1.1, 50, 123],
+        [1, 0.7, -40, 200],
     ]
 
     # this list is prior knowledge
@@ -53,6 +53,7 @@ if __name__ == '__main__':
         x = x_prime
         print("z = ", z_prior)
         print("w = ", w_prior)
+        print("bounds = ", max_abs)
 
     print("")
 
@@ -93,3 +94,4 @@ if __name__ == '__main__':
         x = x_prime
         print("z = ", z)
         print("w = ", w)
+        print("bounds = ", bounds)
