@@ -59,26 +59,36 @@ import numpy as np
 
 class TrueOnlineSarsaLambdaAgent:
 
-    def __init__(self, num_actions, num_state_features, gamma=0.99, alpha=0.0000005, lambda_=0.9):
+    def __init__(self, num_actions, num_state_features,
+                 gamma=0.99, base_alpha=0.1, _lambda=0.8, online_normalization=True):
         self.num_actions = num_actions
         self.gamma = gamma
-        self.alpha = alpha      # TODO decaying learning rate schedule
-        self.lambda_ = lambda_
+        self.alpha = base_alpha / (num_actions * num_state_features)    # TODO decaying learning rate schedule
+        self._lambda = _lambda
 
-        self.weights = np.zeros(num_actions * num_state_features)   # TODO different initialization
+        self.weights = np.ones(num_actions * num_state_features)   # TODO different initialization
         self.z_map = {}     # for every customer a separate vector of dutch traces in this dictionary
+        self.z_bounds_map = {}      # for every z vector, store a vector with most recently-used normalization bounds
+
+        self.online_normalization = online_normalization
+        self.feature_bounds = np.ones(num_actions * num_state_features)
 
     def choose_action_eps_greedy(self, state_features, epsilon=0.05):       # TODO decaying epsilon
         if np.random.random_sample() < epsilon:
             return int(np.random.random_sample() * self.num_actions)
         else:
-            best_q = -1000000
+            best_q = -1_000_000.0
             best_actions = []
 
             for a in range(self.num_actions):
                 x = self.state_action_feature_vector(state_features, a)
+
+                if self.online_normalization:
+                    self.update_weights_normalization(x)
+                    x = x / self.feature_bounds
+
                 q = self.q_value(x)
-                print("Q = ", q)
+                #print("Q({}) = {}".format(a, q))
 
                 if q > best_q:
                     best_q = q
@@ -87,8 +97,6 @@ class TrueOnlineSarsaLambdaAgent:
                     best_actions.append(a)
 
             idx = int(np.random.random_sample() * len(best_actions))
-            print("idx = ", idx)
-            print("len(best_actions) = ", len(best_actions))
             return best_actions[idx]
 
     def learn(self, state_features, action, reward, card_id):
@@ -106,31 +114,45 @@ class TrueOnlineSarsaLambdaAgent:
         :param card_id:
             Card ID of the customer (required for customer-specific dutch traces)
         """
-        print("learning from reward = ", reward)
+        #print("learning from reward = ", reward)
         x = self.state_action_feature_vector(state_features, action)
+
+        if self.online_normalization:
+            self.update_weights_normalization(x)
+            x = x / self.feature_bounds
+
         Q = self.q_value(x)
         delta = reward - Q  # in standard implementation of algorithm, this would include +gamma*Q', which we set to 0
-        print("Q = ", Q)
-        print("delta = ", delta)
+        #print("Q = ", Q)
+        #print("delta = ", delta)
 
         if card_id in self.z_map:
             z = self.z_map[card_id]
+
+            if self.online_normalization:
+                # update normalization of the z vector
+                old_bounds = self.z_bounds_map[card_id]
+                normalization_correction = old_bounds / self.feature_bounds
+                z = np.multiply(z, normalization_correction)
         else:
             z = np.zeros(self.num_actions * len(state_features))
 
-        z = self.gamma * self.lambda_ * z + \
-            (1.0 - self.alpha * self.gamma * self.lambda_ * np.dot(z, x)) * x
+        z = self.gamma * self._lambda * z + \
+            (1.0 - self.alpha * self.gamma * self._lambda * np.dot(z, x)) * x
 
         # the following line would normally twice include Q_old, which is always 0 in our case
-        print("updating weights from ", self.weights)
+        #print("updating weights from ", self.weights)
         self.weights = self.weights + self.alpha * (delta + Q) * z - self.alpha * Q * x
-        print("... to ", self.weights)
-        print("new Q estimate = ", self.q_value(x))
+        #print("... to ", self.weights)
+        #print("new Q estimate = ", self.q_value(x))
+        #print("")
 
         self.z_map[card_id] = z
+        self.z_bounds_map[card_id] = np.copy(self.feature_bounds)
 
     def on_customer_leave(self, card_id):
         self.z_map.pop(card_id)
+        self.z_bounds_map.pop(card_id)
 
     def q_value(self, x):
         """
@@ -162,3 +184,13 @@ class TrueOnlineSarsaLambdaAgent:
                 x = np.append(x, np.zeros(state_features.size))
 
         return x
+
+    def update_weights_normalization(self, x):
+        """
+        Updates weights vector according if necessary due to updated normalization given
+        new state-action feature vector x
+        """
+        old_bounds = np.copy(self.feature_bounds)
+        self.feature_bounds = np.maximum(old_bounds, np.abs(x))
+        normalization_correction = old_bounds / self.feature_bounds
+        self.weights = np.multiply(self.weights, normalization_correction)

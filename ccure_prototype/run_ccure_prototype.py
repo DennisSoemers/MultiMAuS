@@ -13,10 +13,12 @@ Vrije Universiteit Brussel (AI Lab and BUTO) and Université Catholique de Louva
 import atexit
 import random
 import numpy as np
+import os
 from datetime import datetime
 from mesa.time import BaseScheduler
 
 from authenticators.simple_authenticators import NeverSecondAuthenticator
+from ccure_prototype.experiment_summary import ExperimentSummary
 from ccure_prototype.rl_authenticator import RLAuthenticator
 from ccure_prototype.rl_authenticator import StateCreator
 from ccure_prototype.rl.true_online_sarsa_lambda_agent import TrueOnlineSarsaLambdaAgent
@@ -69,6 +71,11 @@ NUM_SIM_STEPS_SKIP = 500
 # number of steps to simulate for evaluation
 NUM_SIM_STEPS_EVALUATION = 30_000
 
+# flat fee we take for every genuine transaction
+FLAT_FEE = 0.01
+# relative fee (multiplied by transaction amount) we take for every genuine transaction
+RELATIVE_FEE = 0.01
+
 # -------------------------------------------
 # simulator parameters
 # -------------------------------------------
@@ -81,6 +88,23 @@ simulator_params['seed'] = random.randrange(2**32)
 # we assume fraudulent cases get reported after 6 simulator steps (hours)   TODO can make this much more fancy
 FRAUD_REPORT_TIME = 6
 
+# -------------------------------------------
+# output
+# -------------------------------------------
+OUTPUT_DIR = os.path.join(os.path.dirname(__file__), 'results')
+OUTPUT_DIR = os.path.join(OUTPUT_DIR, 'seed_{}'.format(simulator_params['seed']))
+
+results_run_idx = 0
+while True:
+    if os.path.isdir(os.path.join(OUTPUT_DIR, "run{0:05d}".format(results_run_idx))):
+        results_run_idx += 1
+    else:
+        break
+
+OUTPUT_DIR = os.path.join(OUTPUT_DIR, "run{0:05d}".format(results_run_idx))
+os.makedirs(OUTPUT_DIR)
+
+OUTPUT_FILE_CUMULATIVE_REWARDS = os.path.join(OUTPUT_DIR, 'cumulative_rewards.csv')
 
 '''
 --------------------------------------------------------------------------------------
@@ -271,7 +295,7 @@ if __name__ == '__main__':
     for t in range(NUM_SIM_STEPS_TRAINING_DATA):
         simulator.step()
 
-        if t % 1000 == 0:
+        if t % 200 == 0:
             print("Finished simulation step ", t)
 
     training_data = get_log(clear_after=True)
@@ -329,38 +353,43 @@ if __name__ == '__main__':
     state_creator = StateCreator(trained_models=trained_models, feature_processing_func=process_data)
     authenticator_test_phase = RLAuthenticator(
         agent=TrueOnlineSarsaLambdaAgent(num_actions=2, num_state_features=state_creator.get_num_state_features()),
-        state_creator=state_creator)
+        state_creator=state_creator, flat_fee=FLAT_FEE, relative_fee=RELATIVE_FEE)
     simulator.authenticator = authenticator_test_phase
 
     # in this dict, we'll store for simulation steps (key = t) lists of transactions that need to be reported
     # at that time
     to_report = {}
 
-    for t in range(NUM_SIM_STEPS_EVALUATION):
-        # process any transactions that get reported and turn out to be fraudulent at this time
-        if t in to_report:
-            transactions_to_report = to_report.pop(t)
+    with ExperimentSummary(flat_fee=FLAT_FEE, relative_fee=RELATIVE_FEE,
+                           cumulative_rewards_filepath=OUTPUT_FILE_CUMULATIVE_REWARDS) as summary:
 
-            for transaction in transactions_to_report:
-                authenticator_test_phase.update_fraudulent(transaction)
+        for t in range(NUM_SIM_STEPS_EVALUATION):
+            # process any transactions that get reported and turn out to be fraudulent at this time
+            if t in to_report:
+                transactions_to_report = to_report.pop(t)
 
-        # a single simulator step
-        simulator.step()
+                for transaction in transactions_to_report:
+                    authenticator_test_phase.update_fraudulent(transaction)
 
-        # dataframe for the latest step (can contain multiple transactions generated in same simulator step)
-        new_data = get_log(clear_after=True)
+            # a single simulator step
+            simulator.step()
 
-        if new_data is not None:
-            # use it for unlabeled feature updates
-            update_feature_constructors_unlabeled(new_data)
+            # dataframe for the latest step (can contain multiple transactions generated in same simulator step)
+            new_data = get_log(clear_after=True)
 
-            for transaction in new_data.itertuples():
-                if transaction.Target == 1:
-                    # fraudulent transaction, report it FRAUD_REPORT_TIME sim-steps from now
-                    if t + FRAUD_REPORT_TIME in to_report:
-                        to_report[t + FRAUD_REPORT_TIME].append(transaction)
-                    else:
-                        to_report[t + FRAUD_REPORT_TIME] = [transaction, ]
+            if new_data is not None:
+                # use it for unlabeled feature updates
+                update_feature_constructors_unlabeled(new_data)
 
-        if t % 1000 == 0:
-            print("Finished simulation step ", t)
+                for transaction in new_data.itertuples():
+                    if transaction.Target == 1:
+                        # fraudulent transaction, report it FRAUD_REPORT_TIME sim-steps from now
+                        if t + FRAUD_REPORT_TIME in to_report:
+                            to_report[t + FRAUD_REPORT_TIME].append(transaction)
+                        else:
+                            to_report[t + FRAUD_REPORT_TIME] = [transaction, ]
+
+                    summary.record_transaction(transaction)
+
+            if t % 200 == 0:
+                print("Finished simulation step ", t)

@@ -14,7 +14,7 @@ from collections import defaultdict
 
 class RLAuthenticator(AbstractAuthenticator):
 
-    def __init__(self, agent, state_creator, flat_fee=0.01, relative_fee=0.01):
+    def __init__(self, agent, state_creator, flat_fee, relative_fee):
         self.agent = agent
         self.state_creator = state_creator
         self.flat_fee = flat_fee
