@@ -60,7 +60,7 @@ authenticator_test_phase = None
 # -------------------------------------------
 # number of steps to simulate to generate training data
 #NUM_SIM_STEPS_TRAINING_DATA = 20_000
-NUM_SIM_STEPS_TRAINING_DATA = 1000
+NUM_SIM_STEPS_TRAINING_DATA = 2000
 # ratio out of training data to use for feature engineering (necessary to learn how to create APATE graph features)
 TRAIN_FEATURE_ENGINEERING_RATIO = 0.25
 
@@ -69,12 +69,16 @@ TRAIN_FEATURE_ENGINEERING_RATIO = 0.25
 NUM_SIM_STEPS_SKIP = 500
 
 # number of steps to simulate for evaluation
-NUM_SIM_STEPS_EVALUATION = 30_000
+#NUM_SIM_STEPS_EVALUATION = 30_000
+NUM_SIM_STEPS_EVALUATION = 200
 
 # flat fee we take for every genuine transaction
 FLAT_FEE = 0.01
 # relative fee (multiplied by transaction amount) we take for every genuine transaction
 RELATIVE_FEE = 0.01
+
+# if True, we'll also profile our running code
+PROFILE = True
 
 # -------------------------------------------
 # simulator parameters
@@ -284,6 +288,12 @@ The script's main code
 --------------------------------------------------------------------------------------
 '''
 if __name__ == '__main__':
+    # profiling
+    if PROFILE:
+        import cProfile
+        pr = cProfile.Profile()
+        pr.enable()
+
     # construct our simulation model
     simulator = TransactionModel(simulator_params,
                                  authenticator=authenticator_training_phase,
@@ -292,17 +302,19 @@ if __name__ == '__main__':
     simulator.customer_leave_callbacks.append(on_customer_leave)
 
     # generate training data
+    print(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), ": Starting generation of training data")
     for t in range(NUM_SIM_STEPS_TRAINING_DATA):
         simulator.step()
 
         if t % 200 == 0:
-            print("Finished simulation step ", t)
+            print(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), ": Finished simulation step ", t)
 
     training_data = get_log(clear_after=True)
     num_training_instances = training_data.shape[0]
     num_feature_learning_instances = int(num_training_instances * TRAIN_FEATURE_ENGINEERING_RATIO)
     num_model_learning_instances = num_training_instances - num_feature_learning_instances
-    print("Generated ", num_training_instances, " training instances (",
+    print(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), ": Generated ",
+          num_training_instances, " training instances (",
           num_feature_learning_instances, " for feature learning, ",
           num_model_learning_instances, " for model learning)")
 
@@ -316,7 +328,7 @@ if __name__ == '__main__':
 
     # compute features for our model learning data
     model_learning_data = process_data(model_learning_data)
-    print("generated features for model learning data")
+    print(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), ": generated features for model learning data")
 
     # TODO train any offline models that need to be trained on this data
 
@@ -340,7 +352,7 @@ if __name__ == '__main__':
     # can still use the skip data to update our feature engineering
     update_feature_constructors_unlabeled(skip_data)
 
-    print("Finished generating gap data")
+    print(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), ": Finished generating gap data")
 
     # allow all training and skip data to be cleaned from memory
     # (may not actually matter since AggregateFeatures keeps them all stored anyway)
@@ -392,4 +404,10 @@ if __name__ == '__main__':
                     summary.record_transaction(transaction)
 
             if t % 200 == 0:
-                print("Finished simulation step ", t)
+                print(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), ": Finished simulation step ", t)
+
+    if PROFILE:
+        # noinspection PyUnboundLocalVariable
+        pr.disable()
+        print("")
+        pr.print_stats(sort='cumtime')
