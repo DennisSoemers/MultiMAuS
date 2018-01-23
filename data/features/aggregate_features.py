@@ -79,50 +79,87 @@ class AggregateFeatures:
         :return:
             Augmented version of the dataset (features added in-place, so no need to capture return value)
         """
+        data["CountryFraudRatio"] = np.nan
+        data["CountrySufficientSampleSize"] = np.nan
+        data["CurrencyFraudRatio"] = np.nan
+        data["CurrencySufficientSampleSize"] = np.nan
+        data["SinHour"] = np.nan
+        data["CosHour"] = np.nan
+        data["SinMonth"] = np.nan
+        data["CosMonth"] = np.nan
+        data["TimeSinceFirstOrder"] = np.nan
 
-        '''
-        The two features below are inspired by [1]. The paper describes clustering countries in four groups
-        based on fraud ratio, and assigning countries with a small sample size to an ''intermediate level of
-        risk'' group regardless of the actual ratio within that small sample size. No further information is
-        provided in the paper about exactly how the clustering is done.
+        data = data.apply(self.compute_rowwise_features, axis=1)
 
-        Instead, we'll simply use a numeric feature for the ratio, and a binary feature indicating whether or
-        not we consider the sample size to be sufficient. Completely linear Machine Learning models (such as
-        pure Logistic Regression) may struggle to combine these two features in an intelligent manner, but
-        more hierarchical models (like Neural Networks or Decision Trees) might be able to combine them a bit better.
-        (based on my intuition at least, no fancy citations for this :( )
-        '''
-        data["CountryFraudRatio"] = data.apply(
-            lambda row: self.get_country_fraud_ratio(row=row), axis=1
-        )
-        data["CountrySufficientSampleSize"] = data.apply(
-            lambda row: self.is_country_sample_size_sufficient(row=row), axis=1
-        )
+        local_dates = data.Local_Date.dt
+        hours = (local_dates.hour + local_dates.minute.astype(float) / 60.0)
+        months = local_dates.month
 
-        '''
-        The following features are not described in any papers specifically
-        '''
-        data["CurrencyFraudRatio"] = data.apply(
-            lambda row: self.get_currency_fraud_ratio(row=row), axis=1
+        data = data.assign(
+            SinHour=lambda df:
+                np.sin(hours * np.pi / 12.0),
+            CosHour=lambda df:
+                np.cos(hours * np.pi / 12.0),
+            SinMonth=lambda df:
+                np.sin(months * np.pi / 6.0),
+            CosMonth=lambda df:
+                np.cos(months * np.pi / 6.0)
         )
-        data["CurrencySufficientSampleSize"] = data.apply(
-            lambda row: self.is_currency_sample_size_sufficient(row=row), axis=1
-        )
-        data = self.add_date_features(data)
-
-        '''
-        The following feature appears in Table 1 in [1], but has no explanation otherwise in the paper. Intuitively,
-        I suppose it can be an indication of how trustworthy a Card is, in that one that has been in use for
-        a very long time may be more trustworthy than a brand new card.
-        '''
-        data["TimeSinceFirstOrder"] = data.apply(
-            lambda row: self.get_time_since_first_order(row=row), axis=1)
 
         data = self.add_historical_features(data)
-
         data = self.add_time_of_day_features(data)
 
         return data
+
+    def compute_rowwise_features(self, row):
+        country = row["Country"]
+
+        if country not in self.country_all_dict:
+            # TODO may be interesting to try average of all countries? Or max, to motivate exploration?
+            country_fraud_ratio = 0.0
+            is_country_sample_size_sufficient = 0
+        else:
+            country_fraud_ratio = float(self.country_fraud_dict[country]) / float(self.country_all_dict[country])
+
+            if self.country_all_dict[country] >= 30:
+                is_country_sample_size_sufficient = 1
+            else:
+                is_country_sample_size_sufficient = 0
+
+        currency = row["Currency"]
+
+        if currency not in self.currency_all_dict:
+            # TODO may be interesting to try average of all currencies? Or max, to motivate exploration?
+            currency_fraud_ratio = 0.0
+            currency_sufficient_sample_size = 0
+        else:
+            currency_fraud_ratio = float(self.currency_fraud_dict[currency]) / float(self.currency_all_dict[currency])
+
+            if self.currency_all_dict[currency] >= 30:
+                currency_sufficient_sample_size = 1
+            else:
+                currency_sufficient_sample_size = 0
+
+        #row["SinHour"] = np.sin((row.Local_Date.hour + float(row.Local_Date.minute) / 60.0) * np.pi / 12.0)
+        #row["CosHour"] = np.cos((row.Local_Date.hour + float(row.Local_Date.minute) / 60.0) * np.pi / 12.0)
+        #row["SinMonth"] = np.sin(row.Local_Date.month * np.pi / 6.0)
+        #row["CosMonth"] = np.cos(row.Local_Date.month * np.pi / 6.0)
+
+        cardID = row.CardID
+
+        if cardID in self.first_order_times_dict:
+            time_delta = row.Global_Date - self.first_order_times_dict[cardID]
+            time_since_first_order = max(0, float(time_delta.days * 24.0) + (float(time_delta.seconds) / 3600.0))
+        else:
+            time_since_first_order = 0
+
+        row["CountryFraudRatio"] = country_fraud_ratio
+        row["CountrySufficientSampleSize"] = is_country_sample_size_sufficient
+        row["CurrencyFraudRatio"] = currency_fraud_ratio
+        row["CurrencySufficientSampleSize"] = currency_sufficient_sample_size
+        row["TimeSinceFirstOrder"] = time_since_first_order
+
+        return row
 
     def add_date_features(self, data):
         """
@@ -205,15 +242,15 @@ class AggregateFeatures:
         extract_transactions_before = self.extract_transactions_before
         extract_transactions_after = self.extract_transactions_after
         for row in data.itertuples():
-            # date of the row we're adding features for
-            row_date = row.Global_Date
-
             # the Card ID of the row we're adding features for
             row_card_id = row.CardID
 
             # select all training data with correct Card ID, and with a date earlier than row
             if row_card_id not in transactions_by_card_ids:
                 continue
+
+            # date of the row we're adding features for
+            row_date = row.Global_Date
 
             card_transactions = transactions_by_card_ids[row_card_id]
             matching_data = extract_transactions_before(card_transactions, row_date)
@@ -224,7 +261,6 @@ class AggregateFeatures:
             # loop over our time-frames in reverse order, so that we can gradually cut out more and more data
             for time_frame_idx in range(len(time_frames) - 1, -1, -1):
                 time_frame = time_frames[time_frame_idx]
-                time_frame_str = str(time_frame)
 
                 # reduce matching data to part that fits within this time frame
                 earliest_allowed_date = row_date - timedelta(hours=time_frame)
@@ -233,12 +269,14 @@ class AggregateFeatures:
                 if matching_data is None:
                     break
 
+                time_frame_str = str(time_frame)
+
                 # loop through our conditions
                 for condition in conditions:
                     conditional_matching_data = matching_data
 
-                    col_name_num = "Num_" + time_frame_str
-                    col_name_amt = "Amt_Sum_" + time_frame_str
+                    col_name_num = "Num_%s" % time_frame_str
+                    col_name_amt = "Amt_Sum_%s" % time_frame_str
 
                     # loop through individual parts of the condition
                     for condition_term in condition:
@@ -305,15 +343,15 @@ class AggregateFeatures:
         exp = math.exp
 
         for row in data.itertuples():
-            # date of the row we're adding features for
-            row_date = row.Global_Date
-
             # the Card ID of the row we're adding features for
             row_card_id = row.CardID
 
             # select all training data with correct Card ID, and with a date earlier than row
             if row_card_id not in transactions_by_card_ids:
                 continue
+
+            # date of the row we're adding features for
+            row_date = row.Global_Date
 
             card_transactions = transactions_by_card_ids[row_card_id]
             matching_data = extract_transactions_before(card_transactions, row_date)
@@ -630,7 +668,7 @@ class AggregateFeatures:
             Ratio of transactions corresponding to given country which are fraudulent
         """
         if row is not None:
-            currency = row["Country"]
+            currency = row["Currency"]
 
         if currency not in self.currency_all_dict:
             # TODO may be interesting to try average of all currencies? Or max, to motivate exploration?

@@ -66,11 +66,13 @@ TRAIN_FEATURE_ENGINEERING_RATIO = 0.25
 
 # number of steps to simulate and discard afterwards to create gap between training and test data
 #NUM_SIM_STEPS_SKIP = 5_000
-NUM_SIM_STEPS_SKIP = 500
+#NUM_SIM_STEPS_SKIP = 500
+NUM_SIM_STEPS_SKIP = 0
 
 # number of steps to simulate for evaluation
 #NUM_SIM_STEPS_EVALUATION = 30_000
-NUM_SIM_STEPS_EVALUATION = 200
+#NUM_SIM_STEPS_EVALUATION = 200
+NUM_SIM_STEPS_EVALUATION = 0
 
 # flat fee we take for every genuine transaction
 FLAT_FEE = 0.01
@@ -87,7 +89,8 @@ simulator_params = parameters.get_default_parameters()
 simulator_params['end_date'] = datetime(9999, 12, 31)
 simulator_params['stay_prob'][0] = 0.9      # stay probability for genuine customers
 simulator_params['stay_prob'][1] = 0.99     # stay probability for fraudsters
-simulator_params['seed'] = random.randrange(2**32)
+#simulator_params['seed'] = random.randrange(2**32)
+simulator_params['seed'] = 1    # TODO change seed back
 
 # we assume fraudulent cases get reported after 6 simulator steps (hours)   TODO can make this much more fancy
 FRAUD_REPORT_TIME = 6
@@ -279,7 +282,8 @@ def update_feature_constructors_unlabeled(data):
     :param data:
         (unlabeled) new data (should NOT have been passed into prepare_feature_constructors() previously)
     """
-    aggregate_feature_constructor.update_unlabeled(data)
+    if data is not None:
+        aggregate_feature_constructor.update_unlabeled(data)
 
 
 '''
