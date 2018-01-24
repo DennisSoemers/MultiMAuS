@@ -14,11 +14,13 @@ import atexit
 import random
 import numpy as np
 import os
+import time
 from datetime import datetime
 from mesa.time import BaseScheduler
 
 from authenticators.simple_authenticators import NeverSecondAuthenticator
 from ccure_prototype.experiment_summary import ExperimentSummary
+from ccure_prototype.gui.control_frame import create_control_frame, is_control_frame_alive
 from ccure_prototype.rl_authenticator import RLAuthenticator
 from ccure_prototype.rl_authenticator import StateCreator
 from ccure_prototype.rl.true_online_sarsa_lambda_agent import TrueOnlineSarsaLambdaAgent
@@ -66,13 +68,13 @@ TRAIN_FEATURE_ENGINEERING_RATIO = 0.25
 
 # number of steps to simulate and discard afterwards to create gap between training and test data
 #NUM_SIM_STEPS_SKIP = 5_000
-#NUM_SIM_STEPS_SKIP = 500
-NUM_SIM_STEPS_SKIP = 0
+NUM_SIM_STEPS_SKIP = 500
+#NUM_SIM_STEPS_SKIP = 0
 
 # number of steps to simulate for evaluation
-#NUM_SIM_STEPS_EVALUATION = 30_000
+NUM_SIM_STEPS_EVALUATION = 30_000
 #NUM_SIM_STEPS_EVALUATION = 200
-NUM_SIM_STEPS_EVALUATION = 0
+#NUM_SIM_STEPS_EVALUATION = 0
 
 # flat fee we take for every genuine transaction
 FLAT_FEE = 0.01
@@ -80,7 +82,7 @@ FLAT_FEE = 0.01
 RELATIVE_FEE = 0.01
 
 # if True, we'll also profile our running code
-PROFILE = True
+PROFILE = False
 
 # -------------------------------------------
 # simulator parameters
@@ -89,8 +91,7 @@ simulator_params = parameters.get_default_parameters()
 simulator_params['end_date'] = datetime(9999, 12, 31)
 simulator_params['stay_prob'][0] = 0.9      # stay probability for genuine customers
 simulator_params['stay_prob'][1] = 0.99     # stay probability for fraudsters
-#simulator_params['seed'] = random.randrange(2**32)
-simulator_params['seed'] = 1    # TODO change seed back
+simulator_params['seed'] = random.randrange(2**32)
 
 # we assume fraudulent cases get reported after 6 simulator steps (hours)   TODO can make this much more fancy
 FRAUD_REPORT_TIME = 6
@@ -112,6 +113,21 @@ OUTPUT_DIR = os.path.join(OUTPUT_DIR, "run{0:05d}".format(results_run_idx))
 os.makedirs(OUTPUT_DIR)
 
 OUTPUT_FILE_CUMULATIVE_REWARDS = os.path.join(OUTPUT_DIR, 'cumulative_rewards.csv')
+
+# -------------------------------------------
+# User Interface
+# -------------------------------------------
+# after how many simulation steps should we update our control UI?
+CONTROL_UI_UPDATE_FREQUENCY = 10
+
+# after how many simulation steps should we update our estimate of simulation speed?
+UPDATE_SPEED_FREQUENCY = 100
+
+# after how many simulation steps should we update our control UI during evaluation?
+CONTROL_UI_UPDATE_FREQUENCY_EVAL = 1
+
+# after how many simulation steps should we update our estimate of simulation speed during evaluation?
+UPDATE_SPEED_FREQUENCY_EVAL = 5
 
 '''
 --------------------------------------------------------------------------------------
@@ -305,110 +321,173 @@ if __name__ == '__main__':
 
     simulator.customer_leave_callbacks.append(on_customer_leave)
 
+    # GUI
+    control_frame = create_control_frame()
+    control_frame.set_status("Generating training data...")
+    exit_simulation = False
+    timestep_speed_measure_time_start = time.time()
+    timestep_speed = 0
+
     # generate training data
-    print(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), ": Starting generation of training data")
     for t in range(NUM_SIM_STEPS_TRAINING_DATA):
+        if t % CONTROL_UI_UPDATE_FREQUENCY == 0:
+            if not is_control_frame_alive():
+                exit_simulation = True
+                break
+
+            control_frame.update_info_labels(t, NUM_SIM_STEPS_TRAINING_DATA, timestep_speed)
+            control_frame.root.update()
+
+            if control_frame.want_quit:
+                exit_simulation = True
+                break
+            if control_frame.want_pause:
+                time.sleep(1)
+                continue
+
+        # This line is the only code we actually want to execute in the loop, the simulator step
         simulator.step()
 
-        if t % 200 == 0:
-            print(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), ": Finished simulation step ", t)
+        if t % UPDATE_SPEED_FREQUENCY == 0:
+            curr_time = time.time()
+            timestep_speed = UPDATE_SPEED_FREQUENCY / (curr_time - timestep_speed_measure_time_start)
+            timestep_speed_measure_time_start = curr_time
 
-    training_data = get_log(clear_after=True)
-    num_training_instances = training_data.shape[0]
-    num_feature_learning_instances = int(num_training_instances * TRAIN_FEATURE_ENGINEERING_RATIO)
-    num_model_learning_instances = num_training_instances - num_feature_learning_instances
-    print(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), ": Generated ",
-          num_training_instances, " training instances (",
-          num_feature_learning_instances, " for feature learning, ",
-          num_model_learning_instances, " for model learning)")
+    if not exit_simulation:
+        training_data = get_log(clear_after=True)
+        num_training_instances = training_data.shape[0]
+        num_feature_learning_instances = int(num_training_instances * TRAIN_FEATURE_ENGINEERING_RATIO)
+        num_model_learning_instances = num_training_instances - num_feature_learning_instances
+        print(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), ": Generated ",
+              num_training_instances, " training instances (",
+              num_feature_learning_instances, " for feature learning, ",
+              num_model_learning_instances, " for model learning)")
 
-    feature_learning_data = training_data.iloc[:num_feature_learning_instances]
-    model_learning_data = training_data.iloc[num_feature_learning_instances:]
+        feature_learning_data = training_data.iloc[:num_feature_learning_instances]
+        model_learning_data = training_data.iloc[num_feature_learning_instances:]
 
-    # prepare our feature engineering objects
-    aggregate_feature_constructor = AggregateFeatures(feature_learning_data)
-    apate_graph_feature_constructor = ApateGraphFeatures(feature_learning_data)
-    update_feature_constructors_unlabeled(model_learning_data)
+        # prepare our feature engineering objects
+        control_frame.set_status("Feature Engineering...")
+        control_frame.root.update()
+        aggregate_feature_constructor = AggregateFeatures(feature_learning_data)
+        apate_graph_feature_constructor = ApateGraphFeatures(feature_learning_data)
+        update_feature_constructors_unlabeled(model_learning_data)
 
-    # compute features for our model learning data
-    model_learning_data = process_data(model_learning_data)
-    print(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), ": generated features for model learning data")
+        # compute features for our model learning data
+        model_learning_data = process_data(model_learning_data)
 
-    # TODO train any offline models that need to be trained on this data
+        # TODO train any offline models that need to be trained on this data
 
-    trained_models = []     # TODO add them to this list
+        trained_models = []     # TODO add them to this list
 
-    # get rid of all fraudsters in training data and replace them with new fraudsters
-    fraudster_ids = set()
-    for transaction in training_data.itertuples():  # this loops through feature and model learning data at once
-        if transaction.Target == 1:
-            fraudster_ids.add(transaction.CardID)
+        # get rid of all fraudsters in training data and replace them with new fraudsters
+        fraudster_ids = set()
+        for transaction in training_data.itertuples():  # this loops through feature and model learning data at once
+            if transaction.Target == 1:
+                fraudster_ids.add(transaction.CardID)
 
-    block_cards(list(fraudster_ids), replace_fraudsters=True)
-    fraudster_ids = None    # clean memory
+        block_cards(list(fraudster_ids), replace_fraudsters=True)
+        fraudster_ids = None    # clean memory
 
-    # generate some data as a gap between training and test data
-    for t in range(NUM_SIM_STEPS_SKIP):
-        simulator.step()
+        # generate some data as a gap between training and test data
+        control_frame.set_status("Generating Gap Data...")
+        for t in range(NUM_SIM_STEPS_SKIP):
+            if t % CONTROL_UI_UPDATE_FREQUENCY == 0:
+                if not is_control_frame_alive():
+                    exit_simulation = True
+                    break
 
-    skip_data = get_log(clear_after=True)
+                control_frame.update_info_labels(t, NUM_SIM_STEPS_SKIP, timestep_speed)
+                control_frame.root.update()
 
-    # can still use the skip data to update our feature engineering
-    update_feature_constructors_unlabeled(skip_data)
+                if control_frame.want_quit:
+                    exit_simulation = True
+                    break
+                if control_frame.want_pause:
+                    time.sleep(1)
+                    continue
 
-    print(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), ": Finished generating gap data")
-
-    # allow all training and skip data to be cleaned from memory
-    # (may not actually matter since AggregateFeatures keeps them all stored anyway)
-    training_data = None
-    feature_learning_data = None
-    model_learning_data = None
-    skip_data = None
-
-    # create our RL-based authenticator and add it to the simulator
-    state_creator = StateCreator(trained_models=trained_models, feature_processing_func=process_data)
-    authenticator_test_phase = RLAuthenticator(
-        agent=TrueOnlineSarsaLambdaAgent(num_actions=2, num_state_features=state_creator.get_num_state_features()),
-        state_creator=state_creator, flat_fee=FLAT_FEE, relative_fee=RELATIVE_FEE)
-    simulator.authenticator = authenticator_test_phase
-
-    # in this dict, we'll store for simulation steps (key = t) lists of transactions that need to be reported
-    # at that time
-    to_report = {}
-
-    with ExperimentSummary(flat_fee=FLAT_FEE, relative_fee=RELATIVE_FEE,
-                           cumulative_rewards_filepath=OUTPUT_FILE_CUMULATIVE_REWARDS) as summary:
-
-        for t in range(NUM_SIM_STEPS_EVALUATION):
-            # process any transactions that get reported and turn out to be fraudulent at this time
-            if t in to_report:
-                transactions_to_report = to_report.pop(t)
-
-                for transaction in transactions_to_report:
-                    authenticator_test_phase.update_fraudulent(transaction)
-
-            # a single simulator step
+            # This line is the only code we actually want to execute in the loop, the simulator step
             simulator.step()
 
-            # dataframe for the latest step (can contain multiple transactions generated in same simulator step)
-            new_data = get_log(clear_after=True)
+            if t % UPDATE_SPEED_FREQUENCY == 0:
+                curr_time = time.time()
+                timestep_speed = UPDATE_SPEED_FREQUENCY / (curr_time - timestep_speed_measure_time_start)
+                timestep_speed_measure_time_start = curr_time
 
-            if new_data is not None:
-                # use it for unlabeled feature updates
-                update_feature_constructors_unlabeled(new_data)
+        if not exit_simulation:
+            skip_data = get_log(clear_after=True)
 
-                for transaction in new_data.itertuples():
-                    if transaction.Target == 1:
-                        # fraudulent transaction, report it FRAUD_REPORT_TIME sim-steps from now
-                        if t + FRAUD_REPORT_TIME in to_report:
-                            to_report[t + FRAUD_REPORT_TIME].append(transaction)
-                        else:
-                            to_report[t + FRAUD_REPORT_TIME] = [transaction, ]
+            # can still use the skip data to update our feature engineering
+            update_feature_constructors_unlabeled(skip_data)
 
-                    summary.record_transaction(transaction)
+            # allow all training and skip data to be cleaned from memory
+            # (may not actually matter since AggregateFeatures keeps them all stored anyway)
+            training_data = None
+            feature_learning_data = None
+            model_learning_data = None
+            skip_data = None
 
-            if t % 200 == 0:
-                print(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), ": Finished simulation step ", t)
+            # create our RL-based authenticator and add it to the simulator
+            state_creator = StateCreator(trained_models=trained_models, feature_processing_func=process_data)
+            authenticator_test_phase = RLAuthenticator(
+                agent=TrueOnlineSarsaLambdaAgent(num_actions=2, num_state_features=state_creator.get_num_state_features()),
+                state_creator=state_creator, flat_fee=FLAT_FEE, relative_fee=RELATIVE_FEE)
+            simulator.authenticator = authenticator_test_phase
+
+            # in this dict, we'll store for simulation steps (key = t) lists of transactions that need to be reported
+            # at that time
+            to_report = {}
+
+            with ExperimentSummary(flat_fee=FLAT_FEE, relative_fee=RELATIVE_FEE,
+                                   cumulative_rewards_filepath=OUTPUT_FILE_CUMULATIVE_REWARDS) as summary:
+
+                control_frame.set_status("Evaluating Simulator...")
+                for t in range(NUM_SIM_STEPS_EVALUATION):
+                    if t % CONTROL_UI_UPDATE_FREQUENCY_EVAL == 0:
+                        if not is_control_frame_alive():
+                            break
+
+                        control_frame.update_info_labels(t, NUM_SIM_STEPS_EVALUATION, timestep_speed)
+                        control_frame.root.update()
+
+                        if control_frame.want_quit:
+                            break
+                        if control_frame.want_pause:
+                            time.sleep(1)
+                            continue
+
+                    # process any transactions that get reported and turn out to be fraudulent at this time
+                    if t in to_report:
+                        transactions_to_report = to_report.pop(t)
+
+                        for transaction in transactions_to_report:
+                            authenticator_test_phase.update_fraudulent(transaction)
+
+                    # a single simulator step
+                    simulator.step()
+
+                    # dataframe for the latest step (can contain multiple transactions generated in same simulator step)
+                    new_data = get_log(clear_after=True)
+
+                    if new_data is not None:
+                        # use it for unlabeled feature updates
+                        update_feature_constructors_unlabeled(new_data)
+
+                        for transaction in new_data.itertuples():
+                            if transaction.Target == 1:
+                                # fraudulent transaction, report it FRAUD_REPORT_TIME sim-steps from now
+                                if t + FRAUD_REPORT_TIME in to_report:
+                                    to_report[t + FRAUD_REPORT_TIME].append(transaction)
+                                else:
+                                    to_report[t + FRAUD_REPORT_TIME] = [transaction, ]
+
+                            summary.record_transaction(transaction)
+
+                    if t % UPDATE_SPEED_FREQUENCY_EVAL == 0:
+                        curr_time = time.time()
+                        timestep_speed = UPDATE_SPEED_FREQUENCY_EVAL / (curr_time - timestep_speed_measure_time_start)
+                        timestep_speed_measure_time_start = curr_time
 
     if PROFILE:
         # noinspection PyUnboundLocalVariable
