@@ -51,6 +51,22 @@ class ControlFrame(Frame):
             text="Finished timesteps: {0} / {1} ({2:.2f}%, speed = {3:.1f} timesteps per second)".format(0, 0, 0, 0))
         self.timesteps_info_label.pack(fill="both", expand=1)
 
+        self.transactions_label = Label(
+            root,
+            text="Num allowed transactions: {0}. Num genuine: {1} ({2:.2f}%). Num fraudulent: {3} ({4:.2f}%)".format(
+                0, 0, 0, 0, 0)
+        )
+        self.transactions_label.pack(fill="both", expand=1)
+
+        self.authentications_label = Label(
+            root,
+            text="Num secondary authentications: {0} ({1:.2f}%). "
+                 "Num genuine: {2} ({3:.2f}% of all genuine transactions). "
+                 "Num fraudulent: {4} ({5:.2f}% of all fraudulent transactions)".format(
+                     0, 0, 0, 0, 0, 0)
+        )
+        self.authentications_label.pack(fill="both", expand=1)
+
         self.pause_button = Button(root, text="Pause", command=self.pause)
         self.pause_button.pack(fill="both", expand=1)
 
@@ -71,8 +87,30 @@ class ControlFrame(Frame):
     def quit(self):
         self.want_quit = True
 
-    def update_info_labels(self, finished_timesteps, goal_timesteps, timestep_speed):
+    def update_info_labels(self, finished_timesteps, goal_timesteps, timestep_speed,
+                           num_transactions=0, num_genuines=0, num_fraudulents=0,
+                           num_secondary_auths=0, num_secondary_auths_genuine=0, num_secondary_auths_fraud=0):
+
         self.timesteps_info_label["text"] = \
             "Finished timesteps: {0} / {1} ({2:.2f}%, speed = {3:.1f} timesteps per second)".format(
                 finished_timesteps, goal_timesteps,
                 (float(finished_timesteps) / goal_timesteps) * 100, timestep_speed)
+
+        if num_transactions > 0:
+            self.transactions_label["text"] = \
+                "Num allowed transactions: {0}. Num genuine: {1} ({2:.2f}%). Num fraudulent: {3} ({4:.2f}%)".format(
+                    num_transactions,
+                    num_genuines, (100.0 * num_genuines) / num_transactions,
+                    num_fraudulents, (100.0 * num_fraudulents) / num_transactions)
+
+        if num_secondary_auths > 0:
+            self.authentications_label["text"] = \
+                "Num secondary authentications: {0} ({1:.2f}%). " \
+                "Num genuine: {2} ({3:.2f}% of all genuine transactions). " \
+                "Num fraudulent: {4} ({5:.2f}% of all fraudulent transactions)".format(
+                    num_secondary_auths,
+                    (100.0 * num_secondary_auths) / num_transactions,
+                    num_secondary_auths_genuine,
+                    (100.0 * num_secondary_auths_genuine) / num_genuines,
+                    num_secondary_auths_fraud,
+                    (100.0 * num_secondary_auths_fraud) / num_fraudulents)

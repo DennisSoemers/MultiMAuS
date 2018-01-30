@@ -431,7 +431,8 @@ if __name__ == '__main__':
             # create our RL-based authenticator and add it to the simulator
             state_creator = StateCreator(trained_models=trained_models, feature_processing_func=process_data)
             authenticator_test_phase = RLAuthenticator(
-                agent=TrueOnlineSarsaLambdaAgent(num_actions=2, num_state_features=state_creator.get_num_state_features()),
+                agent=TrueOnlineSarsaLambdaAgent(
+                    num_actions=2, num_state_features=state_creator.get_num_state_features()),
                 state_creator=state_creator, flat_fee=FLAT_FEE, relative_fee=RELATIVE_FEE)
             simulator.authenticator = authenticator_test_phase
 
@@ -443,7 +444,9 @@ if __name__ == '__main__':
                                    cumulative_rewards_filepath=OUTPUT_FILE_CUMULATIVE_REWARDS) as summary:
 
                 control_frame.set_status("Evaluating Simulator...")
-                for t in range(NUM_SIM_STEPS_EVALUATION):
+                t = 0
+
+                while t < NUM_SIM_STEPS_EVALUATION:
                     if t % CONTROL_UI_UPDATE_FREQUENCY_EVAL == 0:
                         if not is_control_frame_alive():
                             break
@@ -467,6 +470,9 @@ if __name__ == '__main__':
                     # a single simulator step
                     simulator.step()
 
+                    # let our summary know we started a new timestep
+                    summary.new_timestep(t)
+
                     # dataframe for the latest step (can contain multiple transactions generated in same simulator step)
                     new_data = get_log(clear_after=True)
 
@@ -484,10 +490,19 @@ if __name__ == '__main__':
 
                             summary.record_transaction(transaction)
 
+                    # the loop through data above does not include transactions that were filtered out by
+                    # secondary authentication, so need to correct for that in our summary
+                    num_new_auths_genuine = \
+                        (authenticator_test_phase.num_secondary_auths_blocked_genuines
+                         + authenticator_test_phase.num_secondary_auths_passed_genuines) \
+                        - summary.num_secondary_auths_genuine[-1]
+
                     if t % UPDATE_SPEED_FREQUENCY_EVAL == 0:
                         curr_time = time.time()
                         timestep_speed = UPDATE_SPEED_FREQUENCY_EVAL / (curr_time - timestep_speed_measure_time_start)
                         timestep_speed_measure_time_start = curr_time
+
+                    t += 1
 
     if PROFILE:
         # noinspection PyUnboundLocalVariable

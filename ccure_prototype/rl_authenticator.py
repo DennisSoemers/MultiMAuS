@@ -20,6 +20,11 @@ class RLAuthenticator(AbstractAuthenticator):
         self.flat_fee = flat_fee
         self.relative_fee = relative_fee
 
+        self.num_secondary_auths = 0
+        self.num_secondary_auths_blocked_frauds = 0
+        self.num_secondary_auths_blocked_genuines = 0
+        self.num_secondary_auths_passed_genuines = 0
+
     def authorise_transaction(self, customer):
         state_features = self.state_creator.compute_state_vector_from_raw(customer)
         action = self.agent.choose_action_eps_greedy(state_features)
@@ -28,14 +33,21 @@ class RLAuthenticator(AbstractAuthenticator):
         if action == 1:
             # ask secondary authentication
             authentication = customer.give_authentication()
+            self.num_secondary_auths += 1
 
             if authentication is None:
                 # customer refused to authenticate --> reward = 0
                 reward = 0
                 success = False
+
+                if customer.fraudster:
+                    self.num_secondary_auths_blocked_frauds += 1
+                else:
+                    self.num_secondary_auths_blocked_genuines += 1
             else:
                 # successful secondary authentication, so we know for sure it's a genuine transaction
                 reward = self.compute_fees(state_features[1])
+                self.num_secondary_auths_passed_genuines += 1
         else:
             # did not ask for secondary authentication, will by default assume always a successful genuine transaction
             reward = self.compute_fees(state_features[1])

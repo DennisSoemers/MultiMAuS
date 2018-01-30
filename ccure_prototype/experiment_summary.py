@@ -9,11 +9,14 @@ for experiments
 class ExperimentSummary:
 
     def __init__(self, flat_fee, relative_fee, cumulative_rewards_filepath, write_frequency=200):
-        self.last_cumulative_reward = 0
-        self.last_timestep = -1
-
-        self.timesteps = []
-        self.cumulative_rewards = []
+        self.timesteps = [0, ]
+        self.cumulative_rewards = [0, ]
+        self.num_transactions = [0, ]
+        self.num_genuines = [0, ]
+        self.num_frauds = [0, ]
+        self.num_secondary_auths = [0, ]
+        self.num_secondary_auths_genuine = [0, ]
+        self.num_secondary_auths_fraudulent = [0, ]
 
         self.cumulative_rewards_filepath = cumulative_rewards_filepath
 
@@ -33,24 +36,41 @@ class ExperimentSummary:
 
         return exc_val is None
 
-    def record_transaction(self, transaction):
-        if transaction.Target == 1:
-            new_reward = - transaction.Amount
-        else:
-            new_reward = self.flat_fee + self.relative_fee * transaction.Amount
-
-        self.last_cumulative_reward += new_reward
-        self.last_timestep += 1
-
-        self.timesteps.append(self.last_timestep)
-        self.cumulative_rewards.append(self.last_cumulative_reward)
-
+    def new_timestep(self, t):
         if len(self.timesteps) % self.write_frequency == 0:
             self.write_output()
 
+        self.timesteps.append(t)
+
+        self.cumulative_rewards.append(self.cumulative_rewards[-1])
+        self.num_transactions.append(self.num_transactions[-1])
+        self.num_genuines.append(self.num_genuines[-1])
+        self.num_frauds.append(self.num_frauds[-1])
+        self.num_secondary_auths.append(self.num_secondary_auths[-1])
+        self.num_secondary_auths_genuine.append(self.num_secondary_auths_genuine[-1])
+        self.num_secondary_auths_fraudulent.append(self.num_secondary_auths_fraudulent[-1])
+
+    def record_transaction(self, transaction):
+        self.num_transactions[-1] += 1
+
+        if transaction.Target == 1:
+            self.num_frauds[-1] += 1
+            new_reward = - transaction.Amount
+        else:
+            self.num_genuines[-1] += 1
+            new_reward = self.flat_fee + self.relative_fee * transaction.Amount
+
+        self.cumulative_rewards[-1] += new_reward
+
     def write_output(self):
         self.cumulative_rewards_file.writelines("{}, {}\n".format(
-            self.timesteps[i], self.cumulative_rewards[i]) for i in range(len(self.cumulative_rewards)))
+            self.timesteps[i + 1], self.cumulative_rewards[i + 1]) for i in range(len(self.cumulative_rewards) - 1))
 
-        self.cumulative_rewards = []
-        self.timesteps = []
+        self.timesteps = [self.timesteps[-1], ]
+        self.cumulative_rewards = [self.cumulative_rewards[-1], ]
+        self.num_transactions = [self.num_transactions[-1], ]
+        self.num_genuines = [self.num_genuines[-1], ]
+        self.num_frauds = [self.num_frauds[-1], ]
+        self.num_secondary_auths = [self.num_secondary_auths[-1], ]
+        self.num_secondary_auths_genuine = [self.num_secondary_auths_genuine[-1], ]
+        self.num_secondary_auths_fraudulent = [self.num_secondary_auths_fraudulent[-1], ]
