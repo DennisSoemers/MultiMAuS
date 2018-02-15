@@ -151,8 +151,9 @@ class TrueOnlineSarsaLambdaAgent:
         self.z_bounds_map[card_id] = np.copy(self.feature_bounds)
 
     def on_customer_leave(self, card_id):
-        self.z_map.pop(card_id)
-        self.z_bounds_map.pop(card_id)
+        if card_id in self.z_map:
+            self.z_map.pop(card_id)
+            self.z_bounds_map.pop(card_id)
 
     def q_value(self, x):
         """

@@ -16,6 +16,7 @@ class ExperimentSummary:
         self.num_frauds = [0, ]
         self.num_secondary_auths = [0, ]
         self.num_secondary_auths_genuine = [0, ]
+        self.num_secondary_auths_blocked_genuine = [0, ]
         self.num_secondary_auths_fraudulent = [0, ]
 
         self.cumulative_rewards_filepath = cumulative_rewards_filepath
@@ -48,6 +49,7 @@ class ExperimentSummary:
         self.num_frauds.append(self.num_frauds[-1])
         self.num_secondary_auths.append(self.num_secondary_auths[-1])
         self.num_secondary_auths_genuine.append(self.num_secondary_auths_genuine[-1])
+        self.num_secondary_auths_blocked_genuine.append(self.num_secondary_auths_blocked_genuine[-1])
         self.num_secondary_auths_fraudulent.append(self.num_secondary_auths_fraudulent[-1])
 
     def record_transaction(self, transaction):
@@ -73,4 +75,5 @@ class ExperimentSummary:
         self.num_frauds = [self.num_frauds[-1], ]
         self.num_secondary_auths = [self.num_secondary_auths[-1], ]
         self.num_secondary_auths_genuine = [self.num_secondary_auths_genuine[-1], ]
+        self.num_secondary_auths_blocked_genuine = [self.num_secondary_auths_blocked_genuine[-1], ]
         self.num_secondary_auths_fraudulent = [self.num_secondary_auths_fraudulent[-1], ]

@@ -98,10 +98,18 @@ class ControlFrame(Frame):
 
         if num_transactions > 0:
             self.transactions_label["text"] = \
-                "Num allowed transactions: {0}. Num genuine: {1} ({2:.2f}%). Num fraudulent: {3} ({4:.2f}%)".format(
+                "Num transactions: {0}. Num genuine: {1} ({2:.2f}%). Num fraudulent: {3} ({4:.2f}%)".format(
                     num_transactions,
                     num_genuines, (100.0 * num_genuines) / num_transactions,
                     num_fraudulents, (100.0 * num_fraudulents) / num_transactions)
+
+        # avoid divisions by 0
+        if num_transactions == 0:
+            num_transactions = 1
+        if num_genuines == 0:
+            num_genuines = 1
+        if num_fraudulents == 0:
+            num_fraudulents = 1
 
         if num_secondary_auths > 0:
             self.authentications_label["text"] = \

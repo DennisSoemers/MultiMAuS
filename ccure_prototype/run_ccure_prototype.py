@@ -274,7 +274,7 @@ def process_data(data):
         Processed dataframe
     """
     apate_graph_feature_constructor.add_graph_features(data)
-    aggregate_feature_constructor.add_aggregate_features(data)
+    data = aggregate_feature_constructor.add_aggregate_features(data)
 
     # remove non-numeric columns / columns we don't need after adding features
     data.drop(["Global_Date", "Local_Date", "MerchantID", "Currency", "Country",
@@ -451,7 +451,15 @@ if __name__ == '__main__':
                         if not is_control_frame_alive():
                             break
 
-                        control_frame.update_info_labels(t, NUM_SIM_STEPS_EVALUATION, timestep_speed)
+                        control_frame.update_info_labels(
+                            t, NUM_SIM_STEPS_EVALUATION, timestep_speed,
+                            num_transactions=summary.num_transactions[-1],
+                            num_genuines=summary.num_genuines[-1],
+                            num_fraudulents=summary.num_frauds[-1],
+                            num_secondary_auths=summary.num_secondary_auths[-1],
+                            num_secondary_auths_genuine=summary.num_secondary_auths_genuine[-1],
+                            num_secondary_auths_fraud=summary.num_secondary_auths_fraudulent[-1])
+
                         control_frame.root.update()
 
                         if control_frame.want_quit:
@@ -476,6 +484,8 @@ if __name__ == '__main__':
                     # dataframe for the latest step (can contain multiple transactions generated in same simulator step)
                     new_data = get_log(clear_after=True)
 
+                    old_num_genuines = summary.num_genuines[-1]
+
                     if new_data is not None:
                         # use it for unlabeled feature updates
                         update_feature_constructors_unlabeled(new_data)
@@ -492,10 +502,26 @@ if __name__ == '__main__':
 
                     # the loop through data above does not include transactions that were filtered out by
                     # secondary authentication, so need to correct for that in our summary
-                    num_new_auths_genuine = \
-                        (authenticator_test_phase.num_secondary_auths_blocked_genuines
-                         + authenticator_test_phase.num_secondary_auths_passed_genuines) \
-                        - summary.num_secondary_auths_genuine[-1]
+                    num_new_blocked_genuines = \
+                        authenticator_test_phase.num_secondary_auths_blocked_genuines \
+                        - summary.num_secondary_auths_blocked_genuine[-1]
+                    summary.num_transactions[-1] += num_new_blocked_genuines
+                    summary.num_genuines[-1] += num_new_blocked_genuines
+                    summary.num_secondary_auths_genuine[-1] = \
+                        authenticator_test_phase.num_secondary_auths_passed_genuines + \
+                        authenticator_test_phase.num_secondary_auths_blocked_genuines
+                    summary.num_secondary_auths_blocked_genuine[-1] = \
+                        authenticator_test_phase.num_secondary_auths_blocked_genuines
+
+                    num_new_blocked_frauds = \
+                        authenticator_test_phase.num_secondary_auths_blocked_frauds - \
+                        summary.num_secondary_auths_fraudulent[-1]
+                    summary.num_transactions[-1] += num_new_blocked_frauds
+                    summary.num_frauds[-1] += num_new_blocked_frauds
+                    summary.num_secondary_auths_fraudulent[-1] = \
+                        authenticator_test_phase.num_secondary_auths_blocked_frauds
+
+                    summary.num_secondary_auths[-1] = authenticator_test_phase.num_secondary_auths
 
                     if t % UPDATE_SPEED_FREQUENCY_EVAL == 0:
                         curr_time = time.time()
