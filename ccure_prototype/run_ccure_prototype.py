@@ -29,6 +29,9 @@ from data.features.apate_graph_features import ApateGraphFeatures
 from simulator import parameters
 from simulator.transaction_model import TransactionModel
 
+# this also immediately initualizes an R environment
+import rpy2.robjects as robjects
+
 
 # want stack trace when warnings are raised
 #np.seterr(all='raise')
@@ -85,6 +88,12 @@ RELATIVE_FEE = 0.01
 PROFILE = False
 
 # -------------------------------------------
+# R offline models
+# -------------------------------------------
+# filepath for offline models R script. NOTE: hardcoded
+CS_MODELS_R_FILEPATH = "D:/Apps/C-Cure/Code/R/CSModels.R"
+
+# -------------------------------------------
 # simulator parameters
 # -------------------------------------------
 simulator_params = parameters.get_default_parameters()
@@ -112,6 +121,8 @@ while True:
 OUTPUT_DIR = os.path.join(OUTPUT_DIR, "run{0:05d}".format(results_run_idx))
 os.makedirs(OUTPUT_DIR)
 
+OUTPUT_FILE_FEATURE_LEARNING_DATA = os.path.join(OUTPUT_DIR, 'feature_learning_data.csv')
+OUTPUT_FILE_MODEL_LEARNING_DATA = os.path.join(OUTPUT_DIR, 'model_learning_data.csv')
 OUTPUT_FILE_CUMULATIVE_REWARDS = os.path.join(OUTPUT_DIR, 'cumulative_rewards.csv')
 
 # -------------------------------------------
@@ -376,7 +387,14 @@ if __name__ == '__main__':
         # compute features for our model learning data
         model_learning_data = process_data(model_learning_data)
 
-        # TODO train any offline models that need to be trained on this data
+        feature_learning_data.to_csv(OUTPUT_FILE_FEATURE_LEARNING_DATA, index_label=False)
+        model_learning_data.to_csv(OUTPUT_FILE_MODEL_LEARNING_DATA, index_label=False)
+
+        # train offline models in R
+        robjects.r('source("{}")'.format(CS_MODELS_R_FILEPATH))
+        robjects.r('datafilename<-"{}"'.format(OUTPUT_FILE_MODEL_LEARNING_DATA))
+        robjects.r('savepath<-"{}"'.format(OUTPUT_DIR))
+        robjects.r('buildNselectCSModels(datafilename,savepath)')
 
         trained_models = []     # TODO add them to this list
 

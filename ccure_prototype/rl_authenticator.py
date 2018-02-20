@@ -119,44 +119,36 @@ class StateCreator:
         :param customer:
         :return:
         """
-
-        # start with code based on the log_collector implementation to generate raw-feature dataframe
-        # this is probably way too much and too complicated code, but it works
-        agent_reporters = {
-            "Global_Date": lambda c: c.model.curr_global_date.replace(tzinfo=None),
-            "Local_Date": lambda c: c.local_datetime.replace(tzinfo=None),
-            "CardID": lambda c: c.card_id,
-            "MerchantID": lambda c: c.curr_merchant.unique_id,
-            "Amount": lambda c: c.curr_amount,
-            "Currency": lambda c: c.currency,
-            "Country": lambda c: c.country,
-            "Target": lambda c: c.fraudster,
-            "AuthSteps": lambda c: c.curr_auth_step,
-            "TransactionCancelled": lambda c: c.curr_trans_cancelled,
-            "TransactionSuccessful": lambda c: not c.curr_trans_cancelled,
-            "TimeSinceLastTransaction": lambda c: c.time_since_last_transaction
-        }
-
-        agent_vars = {}
-        for var, reporter in agent_reporters.items():
-            agent_records = [(customer.unique_id, reporter(customer))]
-
-            if var not in agent_vars:
-                agent_vars[var] = []
-
-            agent_vars[var].append(agent_records)
-
-        data = defaultdict(dict)
-
-        for var, records in agent_vars.items():
-            for step, entries in enumerate(records):
-                for entry in entries:
-                    agent_id = entry[0]
-                    val = entry[1]
-                    data[(step, agent_id)][var] = val
-
-        raw_transaction_df = pd.DataFrame.from_dict(data, orient="index")
-        raw_transaction_df.index.names = ["Step", "AgentID"]
+        multi_index = pd.MultiIndex.from_arrays([[0], [customer.unique_id]], names=["Step", "AgentID"])
+        raw_transaction_df = pd.DataFrame({
+            "Global_Date": pd.Series([customer.model.curr_global_date.replace(tzinfo=None)], dtype='datetime64[ns]',
+                                     index=multi_index),
+            "Local_Date": pd.Series([customer.local_datetime.replace(tzinfo=None)], dtype='datetime64[ns]',
+                                    index=multi_index),
+            "CardID": pd.Series([customer.card_id], dtype='int64',
+                                index=multi_index),
+            "MerchantID": pd.Series([customer.curr_merchant.unique_id], dtype='int64',
+                                    index=multi_index),
+            "Amount": pd.Series([customer.curr_amount], dtype='float64',
+                                index=multi_index),
+            "Currency": pd.Series([customer.currency], dtype='object',
+                                  index=multi_index),
+            "Country": pd.Series([customer.country], dtype='object',
+                                 index=multi_index),
+            "Target": pd.Series([customer.fraudster], dtype='int8',
+                                index=multi_index),
+            "AuthSteps": pd.Series([customer.curr_auth_step], dtype='int64',
+                                   index=multi_index),
+            "TransactionCancelled": pd.Series([customer.curr_trans_cancelled], dtype='bool',
+                                              index=multi_index),
+            "TransactionSuccessful": pd.Series([not customer.curr_trans_cancelled], dtype='bool',
+                                               index=multi_index),
+            "TimeSinceLastTransaction": pd.Series([customer.time_since_last_transaction], dtype='int64',
+                                                  index=multi_index),
+            "Timestamp": pd.Series([(customer.model.curr_global_date.replace(tzinfo=None)
+                                     - customer.model.start_global_date).total_seconds() / 3600], dtype='int64',
+                                   index=multi_index),
+        })
 
         # use functor to add useful features to this single-row dataframe
         df_with_features = self.feature_processing_func(raw_transaction_df)

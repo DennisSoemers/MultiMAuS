@@ -32,6 +32,7 @@ class TransactionModel(Model):
 
         # current date
         self.curr_global_date = self.parameters['start_date']
+        self.start_global_date = self.curr_global_date.replace(tzinfo=None)
         self.curr_local_dates = {}
 
         # set termination status
@@ -74,6 +75,8 @@ class TransactionModel(Model):
                 "TransactionCancelled": lambda c: c.curr_trans_cancelled,
                 "TransactionSuccessful": lambda c: not c.curr_trans_cancelled,
                 "TimeSinceLastTransaction": lambda c: c.time_since_last_transaction,
+                "Timestamp": lambda c: (c.model.curr_global_date.replace(tzinfo=None)
+                                        - c.model.start_global_date).total_seconds() / 3600,
             },
             model_reporters={
                 "Satisfaction": lambda m: sum((customer.satisfaction for customer in m.customers)) / len(m.customers)
