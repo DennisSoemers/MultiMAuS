@@ -100,11 +100,11 @@ class RLAuthenticator(AbstractAuthenticator):
 
 class StateCreator:
 
-    def __init__(self, trained_models, feature_processing_func):
-        self.trained_models = trained_models
+    def __init__(self, make_predictions_func, feature_processing_func, num_models):
+        self.make_predictions_func = make_predictions_func
         self.feature_processing_func = feature_processing_func
 
-        self.num_state_features = 3  # TODO properly compute this
+        self.num_state_features = 3 + num_models
 
     def compute_state_vector_from_raw(self, customer):
         """
@@ -170,6 +170,10 @@ class StateCreator:
         state_features.append(1.0)  # intercept
         state_features.append(feature_vector.Amount)
         state_features.append(feature_vector.TimeSinceLastTransaction)
+
+        predictions = self.make_predictions_func(feature_vector.values)
+        print(predictions)
+        state_features.extend(predictions.flatten().tolist())
 
         assert self.num_state_features == len(state_features)
         return np.array(state_features)

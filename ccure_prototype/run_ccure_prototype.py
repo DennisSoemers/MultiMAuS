@@ -493,7 +493,12 @@ if __name__ == '__main__':
                 robjects.r('savepath<-\"{}\"'.format(savepath_string))
                 robjects.r('loadCSModels(savepath)')
 
-                trained_models = []     # TODO add them to this list
+                # create function that wr can use to make predictions for transactions
+                import rpy2.robjects.numpy2ri
+                rpy2.robjects.numpy2ri.activate()
+
+                def make_predictions(feature_vector):
+                    return np.array(robjects.r.predictCSModels(feature_vector))
 
                 # get rid of all fraudsters in training data and replace them with new fraudsters
                 fraudster_ids = set()
@@ -551,7 +556,9 @@ if __name__ == '__main__':
                     skip_data = None
 
                     # create our RL-based authenticator and add it to the simulator
-                    state_creator = StateCreator(trained_models=trained_models, feature_processing_func=process_data)
+                    state_creator = StateCreator(make_predictions_func=make_predictions,
+                                                 feature_processing_func=process_data,
+                                                 num_models=len(os.listdir(final_models_dir)))
                     authenticator_test_phase = RLAuthenticator(
                         agent=TrueOnlineSarsaLambdaAgent(
                             num_actions=2, num_state_features=state_creator.get_num_state_features()),
