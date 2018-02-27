@@ -137,7 +137,7 @@ if __name__ == '__main__':
     CONTROL_UI_UPDATE_FREQUENCY_EVAL = 1
 
     # after how many simulation steps should we update our estimate of simulation speed during evaluation?
-    UPDATE_SPEED_FREQUENCY_EVAL = 5
+    UPDATE_SPEED_FREQUENCY_EVAL = 25
 
     # number of models we expect to train in R. This param is only used to report progress in GUI
     NUM_R_MODELS = 62
