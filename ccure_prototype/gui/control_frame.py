@@ -41,15 +41,35 @@ class ControlFrame(Frame):
 
         self.root = root
         self.root.title("C-Cure")
-        self.root.geometry("800x400")
+        self.root.geometry("900x800")
 
-        self.status_label = Label(root, text="Current Status: ")
-        self.status_label.pack(fill="both", expand=1)
-
-        self.timesteps_info_label = Label(
+        self.generate_training_data_info_label = Label(
             root,
-            text="Finished timesteps: {0} / {1} ({2:.2f}%, speed = {3:.1f} timesteps per second)".format(0, 0, 0, 0))
-        self.timesteps_info_label.pack(fill="both", expand=1)
+            text="Generating Training Data: {0} / {1} timesteps ({2:.2f}%, "
+                 "speed = {3:.1f} timesteps per second)".format(0, 0, 0, 0))
+        self.generate_training_data_info_label.pack(fill="both", expand=1)
+
+        self.feature_engineering_info_label = Label(
+            root,
+            text="Feature Engineering... (time elapsed: {0:02d}:{1:02d}:{2:02d})".format(0, 0, 0))
+        self.feature_engineering_info_label.pack(fill="both", expand=1)
+
+        self.r_model_training_info_label = Label(
+            root,
+            text="Trained {0} / {1} models in R (time elapsed: {2:02d}:{3:02d}:{4:02d})".format(0, 0, 0, 0, 0))
+        self.r_model_training_info_label.pack(fill="both", expand=1)
+
+        self.generate_gap_data_info_label = Label(
+            root,
+            text="Generating Gap Data: {0} / {1} timesteps ({2:.2f}%, "
+                 "speed = {3:.1f} timesteps per second)".format(0, 0, 0, 0))
+        self.generate_gap_data_info_label.pack(fill="both", expand=1)
+
+        self.generate_eval_data_info_label = Label(
+            root,
+            text="Evaluating System: {0} / {1} timesteps ({2:.2f}%, "
+                 "speed = {3:.1f} timesteps per second)".format(0, 0, 0, 0))
+        self.generate_eval_data_info_label.pack(fill="both", expand=1)
 
         self.transactions_label = Label(
             root,
@@ -81,18 +101,66 @@ class ControlFrame(Frame):
         else:
             self.pause_button["text"] = "Pause"
 
-    def set_status(self, status):
-        self.status_label["text"] = "Current Status: " + status
-
     def quit(self):
         self.want_quit = True
 
-    def update_info_labels(self, finished_timesteps, goal_timesteps, timestep_speed,
-                           num_transactions=0, num_genuines=0, num_fraudulents=0,
-                           num_secondary_auths=0, num_secondary_auths_genuine=0, num_secondary_auths_fraud=0):
+    def update_info_generate_training_data(self, finished_timesteps, goal_timesteps, timestep_speed, total_time=None):
+        if total_time is None:
+            self.generate_training_data_info_label["text"] = \
+                "Generating Training Data: {0} / {1} timesteps ({2:.2f}%, " \
+                "speed = {3:.1f} timesteps per second)".format(
+                    finished_timesteps, goal_timesteps,
+                    (float(finished_timesteps) / goal_timesteps) * 100, timestep_speed)
+        else:
+            m, s = divmod(total_time, 60)
+            h, m = divmod(m, 60)
+            self.generate_training_data_info_label["text"] = \
+                "Generating Training Data: {0} / {1} timesteps ({2:.2f}%, " \
+                "total time = {3:02d}:{4:02d}:{5:02d})".format(
+                    finished_timesteps, goal_timesteps,
+                    (float(finished_timesteps) / goal_timesteps) * 100, int(h), int(m), int(s))
 
-        self.timesteps_info_label["text"] = \
-            "Finished timesteps: {0} / {1} ({2:.2f}%, speed = {3:.1f} timesteps per second)".format(
+    def update_info_feature_engineering(self, total_time, finished):
+        m, s = divmod(total_time, 60)
+        h, m = divmod(m, 60)
+
+        if not finished:
+            self.feature_engineering_info_label["text"] = \
+                "Feature Engineering... (time elapsed: {0:02d}:{1:02d}:{2:02d})".format(int(h), int(m), int(s))
+        else:
+            self.feature_engineering_info_label["text"] = \
+                "Feature Engineering finished! (time elapsed: {0:02d}:{1:02d}:{2:02d})".format(int(h), int(m), int(s))
+
+    def update_info_r_model_training(self, num_models_trained, goal_num_models, total_time):
+        m, s = divmod(total_time, 60)
+        h, m = divmod(m, 60)
+
+        self.r_model_training_info_label["text"] = \
+            "Trained {0} / {1} models in R (time elapsed: {2:02d}:{3:02d}:{4:02d})".format(
+                num_models_trained, goal_num_models, int(h), int(m), int(s))
+
+    def update_info_generate_gap_data(self, finished_timesteps, goal_timesteps, timestep_speed, total_time=None):
+        if total_time is None:
+            self.generate_gap_data_info_label["text"] = \
+                "Generating Gap Data: {0} / {1} timesteps ({2:.2f}%, " \
+                "speed = {3:.1f} timesteps per second)".format(
+                    finished_timesteps, goal_timesteps,
+                    (float(finished_timesteps) / goal_timesteps) * 100, timestep_speed)
+        else:
+            m, s = divmod(total_time, 60)
+            h, m = divmod(m, 60)
+            self.generate_gap_data_info_label["text"] = \
+                "Generating Gap Data: {0} / {1} timesteps ({2:.2f}%, " \
+                "total time = {3:02d}:{4:02d}:{5:02d}".format(
+                    finished_timesteps, goal_timesteps,
+                    (float(finished_timesteps) / goal_timesteps) * 100, int(h), int(m), int(s))
+
+    def update_info_labels_eval(self, finished_timesteps, goal_timesteps, timestep_speed,
+                                num_transactions=0, num_genuines=0, num_fraudulents=0,
+                                num_secondary_auths=0, num_secondary_auths_genuine=0, num_secondary_auths_fraud=0):
+
+        self.generate_eval_data_info_label["text"] = \
+            "Evaluating System: {0} / {1} ({2:.2f}%, speed = {3:.1f} timesteps per second)".format(
                 finished_timesteps, goal_timesteps,
                 (float(finished_timesteps) / goal_timesteps) * 100, timestep_speed)
 
