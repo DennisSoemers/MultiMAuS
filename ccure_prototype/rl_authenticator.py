@@ -83,7 +83,10 @@ class RLAuthenticator(AbstractAuthenticator):
         :param transaction:
         :return:
         """
-        state_features = self.state_creator.compute_state_vector_from_features(transaction)
+        transaction_df = pd.DataFrame([transaction])
+        df_with_features = self.feature_processing_func(transaction_df)
+        transaction_row = df_with_features.iloc[0]
+        state_features = self.state_creator.compute_state_vector_from_features(transaction_row)
 
         # we lose (= negative reward) the full transaction amount, and the fees we previously mistakenly assumed to
         # have been rewards
@@ -172,7 +175,7 @@ class StateCreator:
         state_features.append(feature_vector.TimeSinceLastTransaction)
 
         predictions = self.make_predictions_func(feature_vector.values)
-        print(predictions)
+        #print(predictions)
         state_features.extend(predictions.flatten().tolist())
 
         assert self.num_state_features == len(state_features)

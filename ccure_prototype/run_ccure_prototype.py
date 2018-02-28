@@ -12,6 +12,7 @@ Vrije Universiteit Brussel (AI Lab and BUTO) and Université Catholique de Louva
 
 import atexit
 import random
+import logging
 import multiprocessing
 import numpy as np
 import os
@@ -32,9 +33,12 @@ from simulator import parameters
 from simulator.transaction_model import TransactionModel
 
 
+logger = multiprocessing.log_to_stderr(logging.INFO)
+
+
 if __name__ == '__main__':
     # want stack trace when warnings are raised
-    #np.seterr(all='raise')
+    np.seterr(all='raise')
 
 
     @atexit.register
@@ -99,7 +103,12 @@ if __name__ == '__main__':
     simulator_params['end_date'] = datetime(9999, 12, 31)
     simulator_params['stay_prob'][0] = 0.9      # stay probability for genuine customers
     simulator_params['stay_prob'][1] = 0.99     # stay probability for fraudsters
-    simulator_params['seed'] = random.randrange(2**32)
+    #simulator_params['seed'] = random.randrange(2**32)
+    simulator_params['seed'] = 3591758435
+    print(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), ": Running C-Cure prototype with seed = ",
+          simulator_params['seed'])
+
+    #simulator_params['num_fraudsters'] = 250
 
     # we assume fraudulent cases get reported after 6 simulator steps (hours)   TODO can make this much more fancy
     FRAUD_REPORT_TIME = 6
@@ -444,9 +453,9 @@ if __name__ == '__main__':
                                                       name="R Model Training Process",
                                                       args=(CS_MODELS_R_FILEPATH,
                                                             OUTPUT_FILE_MODEL_LEARNING_DATA,
-                                                            OUTPUT_DIR),
-                                                      daemon=True)
+                                                            OUTPUT_DIR))
             start_time_r_model_training = time.time()
+            train_r_process.daemon = True
             train_r_process.start()
 
             while train_r_process.is_alive():
@@ -618,7 +627,8 @@ if __name__ == '__main__':
                                 # use it for unlabeled feature updates
                                 update_feature_constructors_unlabeled(new_data)
 
-                                for transaction in new_data.itertuples():
+                                for row in new_data.iterrows():
+                                    transaction = row[1]
                                     if transaction.Target == 1:
                                         # fraudulent transaction, report it FRAUD_REPORT_TIME sim-steps from now
                                         if t + FRAUD_REPORT_TIME in to_report:
