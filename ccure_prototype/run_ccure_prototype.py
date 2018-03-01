@@ -103,8 +103,8 @@ if __name__ == '__main__':
     simulator_params['end_date'] = datetime(9999, 12, 31)
     simulator_params['stay_prob'][0] = 0.9      # stay probability for genuine customers
     simulator_params['stay_prob'][1] = 0.99     # stay probability for fraudsters
-    #simulator_params['seed'] = random.randrange(2**32)
-    simulator_params['seed'] = 3591758435
+    simulator_params['seed'] = random.randrange(2**32)
+    #simulator_params['seed'] = 2204862221
     print(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), ": Running C-Cure prototype with seed = ",
           simulator_params['seed'])
 
@@ -500,7 +500,7 @@ if __name__ == '__main__':
                 if not savepath_string.endswith("/"):
                     savepath_string += "/"
                 robjects.r('savepath<-\"{}\"'.format(savepath_string))
-                robjects.r('loadCSModels(savepath)')
+                num_r_predictions = int(robjects.r('loadCSModels(savepath)')[0])
 
                 # create function that wr can use to make predictions for transactions
                 import rpy2.robjects.numpy2ri
@@ -567,7 +567,7 @@ if __name__ == '__main__':
                     # create our RL-based authenticator and add it to the simulator
                     state_creator = StateCreator(make_predictions_func=make_predictions,
                                                  feature_processing_func=process_data,
-                                                 num_models=len(os.listdir(final_models_dir)))
+                                                 num_models=num_r_predictions)
                     authenticator_test_phase = RLAuthenticator(
                         agent=TrueOnlineSarsaLambdaAgent(
                             num_actions=2, num_state_features=state_creator.get_num_state_features()),
@@ -673,3 +673,5 @@ if __name__ == '__main__':
         pr.disable()
         print("")
         pr.print_stats(sort='cumtime')
+
+    print(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), ": C-Cure finished running.")

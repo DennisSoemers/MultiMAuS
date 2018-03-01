@@ -151,7 +151,7 @@ class ControlFrame(Frame):
             h, m = divmod(m, 60)
             self.generate_gap_data_info_label["text"] = \
                 "Generating Gap Data: {0} / {1} timesteps ({2:.2f}%, " \
-                "total time = {3:02d}:{4:02d}:{5:02d}".format(
+                "total time = {3:02d}:{4:02d}:{5:02d})".format(
                     finished_timesteps, goal_timesteps,
                     (float(finished_timesteps) / goal_timesteps) * 100, int(h), int(m), int(s))
 

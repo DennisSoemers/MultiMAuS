@@ -84,7 +84,7 @@ class RLAuthenticator(AbstractAuthenticator):
         :return:
         """
         transaction_df = pd.DataFrame([transaction])
-        df_with_features = self.feature_processing_func(transaction_df)
+        df_with_features = self.state_creator.feature_processing_func(transaction_df)
         transaction_row = df_with_features.iloc[0]
         state_features = self.state_creator.compute_state_vector_from_features(transaction_row)
 
@@ -177,6 +177,10 @@ class StateCreator:
         predictions = self.make_predictions_func(feature_vector.values)
         #print(predictions)
         state_features.extend(predictions.flatten().tolist())
+
+        #if not self.num_state_features == len(state_features):
+        #    print(predictions)
+        #    print(state_features)
 
         assert self.num_state_features == len(state_features)
         return np.array(state_features)
