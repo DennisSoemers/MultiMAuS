@@ -68,13 +68,13 @@ if __name__ == '__main__':
     # -------------------------------------------
     # number of steps to simulate to generate training data
     #NUM_SIM_STEPS_TRAINING_DATA = 20_000
-    NUM_SIM_STEPS_TRAINING_DATA = 3000
+    NUM_SIM_STEPS_TRAINING_DATA = 8000
     # ratio out of training data to use for feature engineering (necessary to learn how to create APATE graph features)
-    TRAIN_FEATURE_ENGINEERING_RATIO = 0.25
+    TRAIN_FEATURE_ENGINEERING_RATIO = 0.125
 
     # number of steps to simulate and discard afterwards to create gap between training and test data
     #NUM_SIM_STEPS_SKIP = 5_000
-    NUM_SIM_STEPS_SKIP = 500
+    NUM_SIM_STEPS_SKIP = 1000
     #NUM_SIM_STEPS_SKIP = 0
 
     # number of steps to simulate for evaluation
@@ -108,7 +108,7 @@ if __name__ == '__main__':
     print(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), ": Running C-Cure prototype with seed = ",
           simulator_params['seed'])
 
-    #simulator_params['num_fraudsters'] = 250
+    #simulator_params['num_fraudsters'] = 100
 
     # we assume fraudulent cases get reported after 6 simulator steps (hours)   TODO can make this much more fancy
     FRAUD_REPORT_TIME = 6
@@ -146,7 +146,7 @@ if __name__ == '__main__':
     CONTROL_UI_UPDATE_FREQUENCY_EVAL = 1
 
     # after how many simulation steps should we update our estimate of simulation speed during evaluation?
-    UPDATE_SPEED_FREQUENCY_EVAL = 25
+    UPDATE_SPEED_FREQUENCY_EVAL = 1
 
     # number of models we expect to train in R. This param is only used to report progress in GUI
     NUM_R_MODELS = 62
@@ -578,6 +578,8 @@ if __name__ == '__main__':
                     # at that time
                     to_report = {}
 
+                    timestep_speed_measure_time_start = time.time()
+
                     with ExperimentSummary(flat_fee=FLAT_FEE, relative_fee=RELATIVE_FEE,
                                            cumulative_rewards_filepath=OUTPUT_FILE_CUMULATIVE_REWARDS) as summary:
 
@@ -618,7 +620,8 @@ if __name__ == '__main__':
                             # let our summary know we started a new timestep
                             summary.new_timestep(t)
 
-                            # dataframe for the latest step (can contain multiple transactions generated in same simulator step)
+                            # dataframe for the latest step
+                            # (can contain multiple transactions generated in same simulator step)
                             new_data = get_log(clear_after=True)
 
                             old_num_genuines = summary.num_genuines[-1]
@@ -663,8 +666,7 @@ if __name__ == '__main__':
 
                             if t % UPDATE_SPEED_FREQUENCY_EVAL == 0:
                                 curr_time = time.time()
-                                timestep_speed = UPDATE_SPEED_FREQUENCY_EVAL / (curr_time - timestep_speed_measure_time_start)
-                                timestep_speed_measure_time_start = curr_time
+                                timestep_speed = t / (curr_time - timestep_speed_measure_time_start)
 
                             t += 1
 

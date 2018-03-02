@@ -160,7 +160,7 @@ class ControlFrame(Frame):
                                 num_secondary_auths=0, num_secondary_auths_genuine=0, num_secondary_auths_fraud=0):
 
         self.generate_eval_data_info_label["text"] = \
-            "Evaluating System: {0} / {1} ({2:.2f}%, speed = {3:.1f} timesteps per second)".format(
+            "Evaluating System: {0} / {1} ({2:.2f}%, speed = {3:.3f} timesteps per second)".format(
                 finished_timesteps, goal_timesteps,
                 (float(finished_timesteps) / goal_timesteps) * 100, timestep_speed)
 
