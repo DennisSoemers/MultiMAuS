@@ -77,6 +77,7 @@ class TransactionModel(Model):
                 "TimeSinceLastTransaction": lambda c: c.time_since_last_transaction,
                 "Timestamp": lambda c: (c.model.curr_global_date.replace(tzinfo=None)
                                         - c.model.start_global_date).total_seconds() / 3600,
+                # TODO num secondary auths for this customer, then also include as feature for RL
             },
             model_reporters={
                 "Satisfaction": lambda m: sum((customer.satisfaction for customer in m.customers)) / len(m.customers)

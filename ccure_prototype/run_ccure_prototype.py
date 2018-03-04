@@ -33,12 +33,11 @@ from simulator import parameters
 from simulator.transaction_model import TransactionModel
 
 
-logger = multiprocessing.log_to_stderr(logging.INFO)
-
-
 if __name__ == '__main__':
     # want stack trace when warnings are raised
     np.seterr(all='raise')
+
+    logger = multiprocessing.log_to_stderr(logging.INFO)
 
 
     @atexit.register
@@ -108,7 +107,9 @@ if __name__ == '__main__':
     print(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), ": Running C-Cure prototype with seed = ",
           simulator_params['seed'])
 
-    #simulator_params['num_fraudsters'] = 100
+    simulator_params['num_fraudsters'] = 300
+    simulator_params['stay_prob'][0] = 0.9      # genuine
+    simulator_params['stay_prob'][1] = 0.96     # fraud
 
     # we assume fraudulent cases get reported after 6 simulator steps (hours)   TODO can make this much more fancy
     FRAUD_REPORT_TIME = 6

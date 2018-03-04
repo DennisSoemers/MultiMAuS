@@ -191,11 +191,7 @@ class TrueOnlineSarsaLambdaAgent:
         Updates weights vector according if necessary due to updated normalization given
         new state-action feature vector x
         """
-        try:
-            old_bounds = np.copy(self.feature_bounds)
-            self.feature_bounds = np.maximum(old_bounds, np.abs(x))
-            normalization_correction = old_bounds / self.feature_bounds
-            self.weights = np.multiply(self.weights, normalization_correction)
-        except:
-            print(x)
-            crash = 1/0
+        old_bounds = np.copy(self.feature_bounds)
+        self.feature_bounds = np.maximum(old_bounds, np.abs(x))
+        normalization_correction = old_bounds / self.feature_bounds
+        self.weights = np.multiply(self.weights, normalization_correction)
