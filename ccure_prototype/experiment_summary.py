@@ -5,10 +5,12 @@ for experiments
 @author Dennis Soemers
 """
 
+import os
+
 
 class ExperimentSummary:
 
-    def __init__(self, flat_fee, relative_fee, cumulative_rewards_filepath, write_frequency=200):
+    def __init__(self, flat_fee, relative_fee, output_dir, write_frequency=200):
         self.timesteps = [0, ]
         self.cumulative_rewards = [0, ]
         self.num_transactions = [0, ]
@@ -19,7 +21,23 @@ class ExperimentSummary:
         self.num_secondary_auths_blocked_genuine = [0, ]
         self.num_secondary_auths_fraudulent = [0, ]
 
-        self.cumulative_rewards_filepath = cumulative_rewards_filepath
+        self.total_population = [0, ]
+        self.genuine_population = [0, ]
+        self.fraud_population = [0, ]
+
+        self.cumulative_rewards_filepath = os.path.join(output_dir, "cumulative_rewards.csv")
+        self.num_transactions_filepath = os.path.join(output_dir, "num_transactions.csv")
+        self.num_genuines_filepath = os.path.join(output_dir, "num_genuines.csv")
+        self.num_frauds_filepath = os.path.join(output_dir, "num_frauds.csv")
+        self.num_secondary_auths_filepath = os.path.join(output_dir, "num_secondary_auths.csv")
+        self.num_secondary_auths_genuine_filepath = os.path.join(output_dir, "num_secondary_auths_genuine.csv")
+        self.num_secondary_auths_blocked_genuine_filepath = os.path.join(output_dir,
+                                                                         "num_secondary_auths_blocked_genuine.csv")
+        self.num_secondary_auths_fraudulent_filepath = os.path.join(output_dir, "num_secondary_auths_fraudulent.csv")
+
+        self.total_population_filepath = os.path.join(output_dir, "total_population.csv")
+        self.genuine_population_filepath = os.path.join(output_dir, "genuine_population.csv")
+        self.fraud_population_filepath = os.path.join(output_dir, "fraud_population.csv")
 
         self.flat_fee = flat_fee
         self.relative_fee = relative_fee
@@ -27,6 +45,17 @@ class ExperimentSummary:
 
     def __enter__(self):
         self.cumulative_rewards_file = open(self.cumulative_rewards_filepath, 'x')
+        self.num_transactions_file = open(self.num_transactions_filepath, 'x')
+        self.num_genuines_file = open(self.num_genuines_filepath, 'x')
+        self.num_frauds_file = open(self.num_frauds_filepath, 'x')
+        self.num_secondary_auths_file = open(self.num_secondary_auths_filepath, 'x')
+        self.num_secondary_auths_genuine_file = open(self.num_secondary_auths_genuine_filepath, 'x')
+        self.num_secondary_auths_blocked_genuine_file = open(self.num_secondary_auths_blocked_genuine_filepath, 'x')
+        self.num_secondary_auths_fraudulent_file = open(self.num_secondary_auths_fraudulent_filepath, 'x')
+
+        self.total_population_file = open(self.total_population_filepath, 'x')
+        self.genuine_population_file = open(self.genuine_population_filepath, 'x')
+        self.fraud_population_file = open(self.fraud_population_filepath, 'x')
 
         return self
 
@@ -34,6 +63,17 @@ class ExperimentSummary:
         self.write_output()
 
         self.cumulative_rewards_file.close()
+        self.num_transactions_file.close()
+        self.num_genuines_file.close()
+        self.num_frauds_file.close()
+        self.num_secondary_auths_file.close()
+        self.num_secondary_auths_genuine_file.close()
+        self.num_secondary_auths_blocked_genuine_file.close()
+        self.num_secondary_auths_fraudulent_file.close()
+
+        self.total_population_file.close()
+        self.genuine_population_file.close()
+        self.fraud_population_file.close()
 
         return exc_val is None
 
@@ -52,6 +92,10 @@ class ExperimentSummary:
         self.num_secondary_auths_blocked_genuine.append(self.num_secondary_auths_blocked_genuine[-1])
         self.num_secondary_auths_fraudulent.append(self.num_secondary_auths_fraudulent[-1])
 
+        self.total_population.append(self.total_population[-1])
+        self.genuine_population.append(self.genuine_population[-1])
+        self.fraud_population.append(self.fraud_population[-1])
+
     def record_transaction(self, transaction):
         self.num_transactions[-1] += 1
 
@@ -67,6 +111,27 @@ class ExperimentSummary:
     def write_output(self):
         self.cumulative_rewards_file.writelines("{}, {}\n".format(
             self.timesteps[i + 1], self.cumulative_rewards[i + 1]) for i in range(len(self.cumulative_rewards) - 1))
+        self.num_transactions_file.writelines("{}, {}\n".format(
+            self.timesteps[i + 1], self.num_transactions[i + 1]) for i in range(len(self.num_transactions) - 1))
+        self.num_genuines_file.writelines("{}, {}\n".format(
+            self.timesteps[i + 1], self.num_genuines[i + 1]) for i in range(len(self.num_genuines) - 1))
+        self.num_frauds_file.writelines("{}, {}\n".format(
+            self.timesteps[i + 1], self.num_frauds[i + 1]) for i in range(len(self.num_frauds) - 1))
+        self.num_secondary_auths_file.writelines("{}, {}\n".format(
+            self.timesteps[i + 1], self.num_secondary_auths[i + 1]) for i in range(len(self.num_secondary_auths) - 1))
+        self.num_secondary_auths_genuine_file.writelines("{}, {}\n".format(
+            self.timesteps[i + 1], self.num_secondary_auths_genuine[i + 1]) for i in range(len(self.num_secondary_auths_genuine) - 1))
+        self.num_secondary_auths_blocked_genuine_file.writelines("{}, {}\n".format(
+            self.timesteps[i + 1], self.num_secondary_auths_blocked_genuine[i + 1]) for i in range(len(self.num_secondary_auths_blocked_genuine) - 1))
+        self.num_secondary_auths_fraudulent_file.writelines("{}, {}\n".format(
+            self.timesteps[i + 1], self.num_secondary_auths_fraudulent[i + 1]) for i in range(len(self.num_secondary_auths_fraudulent) - 1))
+
+        self.total_population_file.writelines("{}, {}\n".format(
+            self.timesteps[i + 1], self.total_population[i + 1]) for i in range(len(self.total_population) - 1))
+        self.genuine_population_file.writelines("{}, {}\n".format(
+            self.timesteps[i + 1], self.genuine_population[i + 1]) for i in range(len(self.genuine_population) - 1))
+        self.fraud_population_file.writelines("{}, {}\n".format(
+            self.timesteps[i + 1], self.fraud_population[i + 1]) for i in range(len(self.fraud_population) - 1))
 
         self.timesteps = [self.timesteps[-1], ]
         self.cumulative_rewards = [self.cumulative_rewards[-1], ]
@@ -77,3 +142,7 @@ class ExperimentSummary:
         self.num_secondary_auths_genuine = [self.num_secondary_auths_genuine[-1], ]
         self.num_secondary_auths_blocked_genuine = [self.num_secondary_auths_blocked_genuine[-1], ]
         self.num_secondary_auths_fraudulent = [self.num_secondary_auths_fraudulent[-1], ]
+
+        self.total_population = [self.total_population[-1], ]
+        self.genuine_population = [self.genuine_population[-1], ]
+        self.fraud_population = [self.fraud_population[-1], ]

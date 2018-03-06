@@ -67,7 +67,7 @@ if __name__ == '__main__':
     # -------------------------------------------
     # number of steps to simulate to generate training data
     #NUM_SIM_STEPS_TRAINING_DATA = 20_000
-    NUM_SIM_STEPS_TRAINING_DATA = 8000
+    NUM_SIM_STEPS_TRAINING_DATA = 4000
     # ratio out of training data to use for feature engineering (necessary to learn how to create APATE graph features)
     TRAIN_FEATURE_ENGINEERING_RATIO = 0.125
 
@@ -104,8 +104,8 @@ if __name__ == '__main__':
     simulator_params['stay_prob'][1] = 0.99     # stay probability for fraudsters
     simulator_params['seed'] = random.randrange(2**32)
     #simulator_params['seed'] = 2204862221
-    print(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), ": Running C-Cure prototype with seed = ",
-          simulator_params['seed'])
+    seed = simulator_params['seed']
+    print(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), ": Running C-Cure prototype with seed = ", seed)
 
     simulator_params['num_fraudsters'] = 300
     simulator_params['stay_prob'][0] = 0.9      # genuine
@@ -132,7 +132,6 @@ if __name__ == '__main__':
 
     OUTPUT_FILE_FEATURE_LEARNING_DATA = os.path.join(OUTPUT_DIR, 'feature_learning_data.csv')
     OUTPUT_FILE_MODEL_LEARNING_DATA = os.path.join(OUTPUT_DIR, 'model_learning_data.csv')
-    OUTPUT_FILE_CUMULATIVE_REWARDS = os.path.join(OUTPUT_DIR, 'cumulative_rewards.csv')
 
     # -------------------------------------------
     # User Interface
@@ -454,7 +453,8 @@ if __name__ == '__main__':
                                                       name="R Model Training Process",
                                                       args=(CS_MODELS_R_FILEPATH,
                                                             OUTPUT_FILE_MODEL_LEARNING_DATA,
-                                                            OUTPUT_DIR))
+                                                            OUTPUT_DIR,
+                                                            seed))
             start_time_r_model_training = time.time()
             train_r_process.daemon = True
             train_r_process.start()
@@ -496,6 +496,7 @@ if __name__ == '__main__':
 
                 # load R models into memory
                 import rpy2.robjects as robjects
+                robjects.r('set.seed({})'.format(seed))
                 robjects.r('source(\"{}\")'.format(CS_MODELS_R_FILEPATH))
                 savepath_string = OUTPUT_DIR.replace("\\", "/")
                 if not savepath_string.endswith("/"):
@@ -581,8 +582,9 @@ if __name__ == '__main__':
 
                     timestep_speed_measure_time_start = time.time()
 
-                    with ExperimentSummary(flat_fee=FLAT_FEE, relative_fee=RELATIVE_FEE,
-                                           cumulative_rewards_filepath=OUTPUT_FILE_CUMULATIVE_REWARDS) as summary:
+                    with ExperimentSummary(flat_fee=FLAT_FEE,
+                                           relative_fee=RELATIVE_FEE,
+                                           output_dir=OUTPUT_DIR) as summary:
 
                         t = 0
 
@@ -664,6 +666,10 @@ if __name__ == '__main__':
                                 authenticator_test_phase.num_secondary_auths_blocked_frauds
 
                             summary.num_secondary_auths[-1] = authenticator_test_phase.num_secondary_auths
+
+                            summary.total_population[-1] = len(simulator.customers) + len(simulator.fraudsters)
+                            summary.genuine_population[-1] = len(simulator.customers)
+                            summary.fraud_population[-1] = len(simulator.fraudsters)
 
                             if t % UPDATE_SPEED_FREQUENCY_EVAL == 0:
                                 curr_time = time.time()

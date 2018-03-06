@@ -20,13 +20,16 @@ class RLAuthenticator(AbstractAuthenticator):
         self.flat_fee = flat_fee
         self.relative_fee = relative_fee
 
+        self.secondary_auths_per_card = defaultdict(int)
+
         self.num_secondary_auths = 0
         self.num_secondary_auths_blocked_frauds = 0
         self.num_secondary_auths_blocked_genuines = 0
         self.num_secondary_auths_passed_genuines = 0
 
     def authorise_transaction(self, customer):
-        state_features = self.state_creator.compute_state_vector_from_raw(customer)
+        state_features = self.state_creator.compute_state_vector_from_raw(
+            customer, self.secondary_auths_per_card[customer.card_id])
         action = self.agent.choose_action_eps_greedy(state_features)
         success = True
 
@@ -34,6 +37,8 @@ class RLAuthenticator(AbstractAuthenticator):
             # ask secondary authentication
             authentication = customer.give_authentication()
             self.num_secondary_auths += 1
+
+            self.secondary_auths_per_card[customer.card_id] += 1
 
             if authentication is None:
                 # customer refused to authenticate --> reward = 0
@@ -86,7 +91,8 @@ class RLAuthenticator(AbstractAuthenticator):
         transaction_df = pd.DataFrame([transaction])
         df_with_features = self.state_creator.feature_processing_func(transaction_df)
         transaction_row = df_with_features.iloc[0]
-        state_features = self.state_creator.compute_state_vector_from_features(transaction_row)
+        state_features = self.state_creator.compute_state_vector_from_features(
+            transaction_row, self.secondary_auths_per_card[transaction.CardID])
 
         # we lose (= negative reward) the full transaction amount, and the fees we previously mistakenly assumed to
         # have been rewards
@@ -107,9 +113,9 @@ class StateCreator:
         self.make_predictions_func = make_predictions_func
         self.feature_processing_func = feature_processing_func
 
-        self.num_state_features = 3 + num_models
+        self.num_state_features = 4 + num_models
 
-    def compute_state_vector_from_raw(self, customer):
+    def compute_state_vector_from_raw(self, customer, num_secondary_auths_card_id):
         """
         Uses the given customer's current properties to create a feature vector.
 
@@ -159,13 +165,14 @@ class StateCreator:
 
         # we don't want to use all of the features above for the Reinforcement Learner, but we do want to pass
         # them into offline trained models and use their outputs as features
-        return self.compute_state_vector_from_features(transaction_row)
+        return self.compute_state_vector_from_features(transaction_row, num_secondary_auths_card_id)
 
-    def compute_state_vector_from_features(self, feature_vector):
+    def compute_state_vector_from_features(self, feature_vector, num_secondary_auths_card_id):
         """
         Computes state vector from a vector with features
 
         :param feature_vector:
+        :param card_id:
         :return:
         """
         state_features = []
@@ -173,6 +180,7 @@ class StateCreator:
         state_features.append(1.0)  # intercept
         state_features.append(feature_vector.Amount)
         state_features.append(feature_vector.TimeSinceLastTransaction)
+        state_features.append(num_secondary_auths_card_id)
 
         predictions = self.make_predictions_func(feature_vector.values)
         #print(predictions)
