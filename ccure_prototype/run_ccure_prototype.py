@@ -102,7 +102,7 @@ if __name__ == '__main__':
     simulator_params['end_date'] = datetime(9999, 12, 31)
     simulator_params['stay_prob'][0] = 0.9      # stay probability for genuine customers
     simulator_params['stay_prob'][1] = 0.99     # stay probability for fraudsters
-    simulator_params['seed'] = random.randrange(2**32)
+    simulator_params['seed'] = random.randrange(2**31)      # only 2^31 instead of 2^32 because R cant handle big seeds
     #simulator_params['seed'] = 944577390
     seed = simulator_params['seed']
     print(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), ": Running C-Cure prototype with seed = ", seed)
@@ -495,21 +495,22 @@ if __name__ == '__main__':
                 control_frame.root.update()
 
                 # load R models into memory
-                import rpy2.robjects as robjects
-                robjects.r('set.seed({})'.format(seed))
-                robjects.r('source(\"{}\")'.format(CS_MODELS_R_FILEPATH))
+                import rpy2.rinterface as ri
+                ri.initr()
+                r_set_seed = ri.baseenv['set.seed']
+                r_set_seed(seed)
+                r_source = ri.baseenv['source']
+                r_source(ri.StrSexpVector((CS_MODELS_R_FILEPATH, )))
                 savepath_string = OUTPUT_DIR.replace("\\", "/")
                 if not savepath_string.endswith("/"):
                     savepath_string += "/"
-                robjects.r('savepath<-\"{}\"'.format(savepath_string))
-                num_r_predictions = int(robjects.r('loadCSModels(savepath)')[0])
+                r_loadCSModels = ri.globalenv['loadCSModels']
+                num_r_predictions = int(r_loadCSModels(ri.StrSexpVector((savepath_string, )))[0])
+                r_predictCSModels = ri.globalenv['predictCSModels']
 
                 # create function that we can use to make predictions for transactions
-                import rpy2.robjects.numpy2ri
-                rpy2.robjects.numpy2ri.activate()
-
                 def make_predictions(feature_vector):
-                    return np.array(robjects.r.predictCSModels(feature_vector))
+                    return np.asarray(r_predictCSModels(ri.FloatSexpVector(feature_vector)))
 
                 # get rid of all fraudsters in training data and replace them with new fraudsters
                 fraudster_ids = set()
