@@ -103,7 +103,7 @@ if __name__ == '__main__':
     simulator_params['stay_prob'][0] = 0.9      # stay probability for genuine customers
     simulator_params['stay_prob'][1] = 0.99     # stay probability for fraudsters
     simulator_params['seed'] = random.randrange(2**32)
-    #simulator_params['seed'] = 2204862221
+    #simulator_params['seed'] = 944577390
     seed = simulator_params['seed']
     print(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), ": Running C-Cure prototype with seed = ", seed)
 
@@ -504,7 +504,7 @@ if __name__ == '__main__':
                 robjects.r('savepath<-\"{}\"'.format(savepath_string))
                 num_r_predictions = int(robjects.r('loadCSModels(savepath)')[0])
 
-                # create function that wr can use to make predictions for transactions
+                # create function that we can use to make predictions for transactions
                 import rpy2.robjects.numpy2ri
                 rpy2.robjects.numpy2ri.activate()
 
