@@ -9,6 +9,8 @@ without blocking other python threads
 def train_r_models(CS_MODELS_R_FILEPATH, OUTPUT_FILE_MODEL_LEARNING_DATA, OUTPUT_DIR, seed):
     import rpy2.robjects as robjects
     robjects.r('set.seed({})'.format(seed))
+    robjects.r('library(compiler)')
+    robjects.r('enableJIT(3)')
     robjects.r('source(\"{}\")'.format(CS_MODELS_R_FILEPATH))
     robjects.r('datafilename<-\"{}\"'.format(OUTPUT_FILE_MODEL_LEARNING_DATA).replace("\\", "/"))
     savepath_string = OUTPUT_DIR.replace("\\", "/")

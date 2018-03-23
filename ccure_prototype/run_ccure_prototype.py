@@ -499,6 +499,8 @@ if __name__ == '__main__':
                 ri.initr()
                 r_set_seed = ri.baseenv['set.seed']
                 r_set_seed(seed)
+                ri.parse('library(compiler)')
+                ri.parse('enableJIT(3)')
                 r_source = ri.baseenv['source']
                 r_source(ri.StrSexpVector((CS_MODELS_R_FILEPATH, )))
                 savepath_string = OUTPUT_DIR.replace("\\", "/")
@@ -507,10 +509,25 @@ if __name__ == '__main__':
                 r_loadCSModels = ri.globalenv['loadCSModels']
                 num_r_predictions = int(r_loadCSModels(ri.StrSexpVector((savepath_string, )))[0])
                 r_predictCSModels = ri.globalenv['predictCSModels']
+                r_predictCSModelsSlow = ri.globalenv['predictCSModelsSlow']
 
                 # create function that we can use to make predictions for transactions
                 def make_predictions(feature_vector):
-                    return np.asarray(r_predictCSModels(ri.FloatSexpVector(feature_vector)))
+                    preds = np.asarray(r_predictCSModels(ri.FloatSexpVector(feature_vector)))
+
+                    if random.random() < 0.05:
+                        # in about 5% of the predictions, also run a slow prediction and make sure it's equal to the
+                        # optimized version
+                        slow_preds = np.asarray(r_predictCSModelsSlow(ri.FloatSexpVector(feature_vector)))
+
+                        if not np.array_equal(preds, slow_preds):
+                            print("WARNING: slow R predictions not equal to optimized R predictions!")
+                            print("Slow predictions: ", slow_preds)
+                            print("Fast predictions: ", preds)
+                            print("Feature vector: ", feature_vector)
+                            print("")
+
+                    return preds
 
                 # get rid of all fraudsters in training data and replace them with new fraudsters
                 fraudster_ids = set()
