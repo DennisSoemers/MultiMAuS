@@ -12,6 +12,7 @@ Vrije Universiteit Brussel (AI Lab and BUTO) and Université Catholique de Louva
 
 import atexit
 import random
+import json
 import logging
 import multiprocessing
 import numpy as np
@@ -102,8 +103,8 @@ if __name__ == '__main__':
     simulator_params['end_date'] = datetime(9999, 12, 31)
     simulator_params['stay_prob'][0] = 0.9      # stay probability for genuine customers
     simulator_params['stay_prob'][1] = 0.99     # stay probability for fraudsters
-    simulator_params['seed'] = random.randrange(2**31)      # only 2^31 instead of 2^32 because R cant handle big seeds
-    #simulator_params['seed'] = 944577390
+    #simulator_params['seed'] = random.randrange(2**31)      # only 2^31 instead of 2^32 because R cant handle big seeds
+    simulator_params['seed'] = 220152506
     seed = simulator_params['seed']
     print(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), ": Running C-Cure prototype with seed = ", seed)
 
@@ -118,7 +119,32 @@ if __name__ == '__main__':
     # output
     # -------------------------------------------
     OUTPUT_DIR = os.path.join(os.path.dirname(__file__), 'results')
+
+    experiment_config = simulator_params.copy()
+    experiment_config.pop('seed')
+    config_idx = 0
+    while True:
+        if os.path.isdir(os.path.join(OUTPUT_DIR, "config{0:05d}_dir".format(config_idx))):
+            existing_config = json.load(open(os.path.join(OUTPUT_DIR, "config{0:05d}_file.json".format(config_idx))))
+
+            # we do the loads(dumps( . )) here because datetime objects will just be strings in existing_config
+            if json.loads(json.dumps(experiment_config, default=str)) == existing_config:
+                # matching config, so use the existing dictionary
+                break
+            else:
+                # this particular existing config doesn't match, so increment index
+                config_idx += 1
+        else:
+            # haven't found a matching config, so need to save new file and create new dir
+            with open(os.path.join(OUTPUT_DIR, "config{0:05d}_file.json".format(config_idx)), 'w') as outfile:
+                json.dump(experiment_config, outfile, indent=4, default=str)
+
+            break
+
+    OUTPUT_DIR = os.path.join(OUTPUT_DIR, "config{0:05d}_dir".format(config_idx))
     OUTPUT_DIR = os.path.join(OUTPUT_DIR, 'seed_{}'.format(simulator_params['seed']))
+
+    OUTPUT_DIR_SHARED_RUNS = OUTPUT_DIR
 
     results_run_idx = 0
     while True:
@@ -445,49 +471,49 @@ if __name__ == '__main__':
             control_frame.update_info_feature_engineering(time.time() - start_time_feature_engineering, finished=True)
             control_frame.root.update()
 
-            # train offline models in R
-
-            # create new process
-            from ccure_prototype import r_model_training
-            train_r_process = multiprocessing.Process(target=r_model_training.train_r_models,
-                                                      name="R Model Training Process",
-                                                      args=(CS_MODELS_R_FILEPATH,
-                                                            OUTPUT_FILE_MODEL_LEARNING_DATA,
-                                                            OUTPUT_DIR,
-                                                            seed))
+            # train offline models in R if our Models directory does not already exist
             start_time_r_model_training = time.time()
-            train_r_process.daemon = True
-            train_r_process.start()
+            if not os.path.isdir(os.path.join(OUTPUT_DIR_SHARED_RUNS, "Models")):
+                # create new process
+                from ccure_prototype import r_model_training
+                train_r_process = multiprocessing.Process(target=r_model_training.train_r_models,
+                                                          name="R Model Training Process",
+                                                          args=(CS_MODELS_R_FILEPATH,
+                                                                OUTPUT_FILE_MODEL_LEARNING_DATA,
+                                                                OUTPUT_DIR_SHARED_RUNS,
+                                                                seed))
+                train_r_process.daemon = True
+                train_r_process.start()
 
-            while train_r_process.is_alive():
-                if not is_control_frame_alive():
-                    exit_simulation = True
-                    break
+                while train_r_process.is_alive():
+                    if not is_control_frame_alive():
+                        exit_simulation = True
+                        break
 
-                # figure out for how many models we already have files
-                trial_models_dir = os.path.join(OUTPUT_DIR, "TrialModels")
-                final_models_dir = os.path.join(OUTPUT_DIR, "Models")
+                    # figure out for how many models we already have files
+                    trial_models_dir = os.path.join(OUTPUT_DIR_SHARED_RUNS, "TrialModels")
+                    final_models_dir = os.path.join(OUTPUT_DIR_SHARED_RUNS, "Models")
 
-                if not os.path.isdir(trial_models_dir) or not os.path.isdir(final_models_dir):
-                    num_models_trained = 0
-                else:
-                    num_models_trained = len(os.listdir(trial_models_dir)) + len(os.listdir(final_models_dir))
+                    if not os.path.isdir(trial_models_dir) or not os.path.isdir(final_models_dir):
+                        num_models_trained = 0
+                    else:
+                        num_models_trained = len(os.listdir(trial_models_dir)) + len(os.listdir(final_models_dir))
 
-                control_frame.update_info_r_model_training(
-                    num_models_trained,
-                    NUM_R_MODELS, time.time() - start_time_r_model_training)
-                control_frame.root.update()
+                    control_frame.update_info_r_model_training(
+                        num_models_trained,
+                        NUM_R_MODELS, time.time() - start_time_r_model_training)
+                    control_frame.root.update()
 
-                if control_frame.want_quit:
-                    exit_simulation = True
-                    break
+                    if control_frame.want_quit:
+                        exit_simulation = True
+                        break
 
-                # sleep for a bit while we let model training thread do its work
-                time.sleep(1)
+                    # sleep for a bit while we let model training thread do its work
+                    time.sleep(1)
 
             if not exit_simulation:
-                trial_models_dir = os.path.join(OUTPUT_DIR, "TrialModels")
-                final_models_dir = os.path.join(OUTPUT_DIR, "Models")
+                trial_models_dir = os.path.join(OUTPUT_DIR_SHARED_RUNS, "TrialModels")
+                final_models_dir = os.path.join(OUTPUT_DIR_SHARED_RUNS, "Models")
 
                 control_frame.update_info_r_model_training(
                     len(os.listdir(trial_models_dir)) + len(os.listdir(final_models_dir)),
@@ -503,7 +529,7 @@ if __name__ == '__main__':
                 ri.parse('enableJIT(3)')
                 r_source = ri.baseenv['source']
                 r_source(ri.StrSexpVector((CS_MODELS_R_FILEPATH, )))
-                savepath_string = OUTPUT_DIR.replace("\\", "/")
+                savepath_string = OUTPUT_DIR_SHARED_RUNS.replace("\\", "/")
                 if not savepath_string.endswith("/"):
                     savepath_string += "/"
                 r_loadCSModels = ri.globalenv['loadCSModels']
@@ -513,9 +539,10 @@ if __name__ == '__main__':
 
                 # create function that we can use to make predictions for transactions
                 def make_predictions(feature_vector):
+                    #print("feature_vector = ", feature_vector)
                     preds = np.asarray(r_predictCSModels(ri.FloatSexpVector(feature_vector)))
 
-                    if random.random() < 0.05:
+                    if random.random() < 0.025:
                         # in about 5% of the predictions, also run a slow prediction and make sure it's equal to the
                         # optimized version
                         slow_preds = np.asarray(r_predictCSModelsSlow(ri.FloatSexpVector(feature_vector)))
