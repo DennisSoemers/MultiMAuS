@@ -10,9 +10,11 @@ import os
 
 class ExperimentSummary:
 
-    def __init__(self, flat_fee, relative_fee, output_dir, write_frequency=200):
+    def __init__(self, flat_fee, relative_fee, output_dir, cs_model_config_names, write_frequency=200):
+        self.cs_model_config_names = cs_model_config_names
+
         self.timesteps = [0, ]
-        self.cumulative_rewards = [0, ]
+        self.cumulative_rewards = [0.0, ]
         self.num_transactions = [0, ]
         self.num_genuines = [0, ]
         self.num_frauds = [0, ]
@@ -24,6 +26,14 @@ class ExperimentSummary:
         self.total_population = [0, ]
         self.genuine_population = [0, ]
         self.fraud_population = [0, ]
+
+        self.total_fraud_amounts_seen = [0.0, ]
+
+        self.num_true_positives_per_model = {model_name: [0, ] for model_name in cs_model_config_names}
+        self.num_false_positives_per_model = {model_name: [0, ] for model_name in cs_model_config_names}
+        self.num_true_negatives_per_model = {model_name: [0, ] for model_name in cs_model_config_names}
+        self.num_false_negatives_per_model = {model_name: [0, ] for model_name in cs_model_config_names}
+        self.total_fraud_amounts_detected_per_model = {model_name: [0.0, ] for model_name in cs_model_config_names}
 
         self.cumulative_rewards_filepath = os.path.join(output_dir, "cumulative_rewards.csv")
         self.num_transactions_filepath = os.path.join(output_dir, "num_transactions.csv")
@@ -38,6 +48,29 @@ class ExperimentSummary:
         self.total_population_filepath = os.path.join(output_dir, "total_population.csv")
         self.genuine_population_filepath = os.path.join(output_dir, "genuine_population.csv")
         self.fraud_population_filepath = os.path.join(output_dir, "fraud_population.csv")
+
+        self.total_fraud_amounts_seen_filepath = os.path.join(output_dir, "total_fraud_amounts_seen.csv")
+
+        self.num_true_positives_per_model_filepaths = {
+            model_name: os.path.join(output_dir, "num_true_positives_{}.csv".format(
+                model_name.replace(":", "_").replace("/", "_")))
+            for model_name in cs_model_config_names}
+        self.num_false_positives_per_model_filepaths = {
+            model_name: os.path.join(output_dir, "num_false_positives_{}.csv".format(
+                model_name.replace(":", "_").replace("/", "_")))
+            for model_name in cs_model_config_names}
+        self.num_true_negatives_per_model_filepaths = {
+            model_name: os.path.join(output_dir, "num_true_negatives_{}.csv".format(
+                model_name.replace(":", "_").replace("/", "_")))
+            for model_name in cs_model_config_names}
+        self.num_false_negatives_per_model_filepaths = {
+            model_name: os.path.join(output_dir, "num_false_negatives_{}.csv".format(
+                model_name.replace(":", "_").replace("/", "_")))
+            for model_name in cs_model_config_names}
+        self.total_fraud_amounts_detected_per_model_filepaths = {
+            model_name: os.path.join(output_dir, "total_fraud_amounts_detected_{}.csv".format(
+                model_name.replace(":", "_").replace("/", "_")))
+            for model_name in cs_model_config_names}
 
         self.flat_fee = flat_fee
         self.relative_fee = relative_fee
@@ -57,6 +90,24 @@ class ExperimentSummary:
         self.genuine_population_file = open(self.genuine_population_filepath, 'x')
         self.fraud_population_file = open(self.fraud_population_filepath, 'x')
 
+        self.total_fraud_amounts_seen_file = open(self.total_fraud_amounts_seen_filepath, 'x')
+
+        self.num_true_positives_per_model_files = \
+            {model_name: open(self.num_true_positives_per_model_filepaths[model_name], 'x')
+             for model_name in self.cs_model_config_names}
+        self.num_false_positives_per_model_files = \
+            {model_name: open(self.num_false_positives_per_model_filepaths[model_name], 'x')
+             for model_name in self.cs_model_config_names}
+        self.num_true_negatives_per_model_files = \
+            {model_name: open(self.num_true_negatives_per_model_filepaths[model_name], 'x')
+             for model_name in self.cs_model_config_names}
+        self.num_false_negatives_per_model_files = \
+            {model_name: open(self.num_false_negatives_per_model_filepaths[model_name], 'x')
+             for model_name in self.cs_model_config_names}
+        self.total_fraud_amounts_detected_per_model_files = \
+            {model_name: open(self.total_fraud_amounts_detected_per_model_filepaths[model_name], 'x')
+             for model_name in self.cs_model_config_names}
+
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -74,6 +125,15 @@ class ExperimentSummary:
         self.total_population_file.close()
         self.genuine_population_file.close()
         self.fraud_population_file.close()
+
+        self.total_fraud_amounts_seen_file.close()
+
+        for model_name in self.cs_model_config_names:
+            self.num_true_positives_per_model_files[model_name].close()
+            self.num_false_positives_per_model_files[model_name].close()
+            self.num_true_negatives_per_model_files[model_name].close()
+            self.num_false_negatives_per_model_files[model_name].close()
+            self.total_fraud_amounts_detected_per_model_files[model_name].close()
 
         return exc_val is None
 
@@ -95,6 +155,16 @@ class ExperimentSummary:
         self.total_population.append(self.total_population[-1])
         self.genuine_population.append(self.genuine_population[-1])
         self.fraud_population.append(self.fraud_population[-1])
+
+        self.total_fraud_amounts_seen.append(self.total_fraud_amounts_seen[-1])
+
+        for model_name in self.cs_model_config_names:
+            self.num_true_positives_per_model[model_name].append(self.num_true_positives_per_model[model_name][-1])
+            self.num_false_positives_per_model[model_name].append(self.num_false_positives_per_model[model_name][-1])
+            self.num_true_negatives_per_model[model_name].append(self.num_true_negatives_per_model[model_name][-1])
+            self.num_false_negatives_per_model[model_name].append(self.num_false_negatives_per_model[model_name][-1])
+            self.total_fraud_amounts_detected_per_model[model_name].append(
+                self.total_fraud_amounts_detected_per_model[model_name][-1])
 
     def record_transaction(self, transaction):
         self.num_transactions[-1] += 1
@@ -133,6 +203,26 @@ class ExperimentSummary:
         self.fraud_population_file.writelines("{}, {}\n".format(
             self.timesteps[i + 1], self.fraud_population[i + 1]) for i in range(len(self.fraud_population) - 1))
 
+        self.total_fraud_amounts_seen_file.writelines("{}, {}\n".format(
+            self.timesteps[i + 1], self.total_fraud_amounts_seen[i + 1]) for i in range(len(self.total_fraud_amounts_seen) - 1))
+
+        for model_name in self.cs_model_config_names:
+            self.num_true_positives_per_model_files[model_name].writelines("{}, {}\n".format(
+                self.timesteps[i + 1], self.num_true_positives_per_model[model_name][i + 1]) for i in range(
+                len(self.num_true_positives_per_model[model_name]) - 1))
+            self.num_false_positives_per_model_files[model_name].writelines("{}, {}\n".format(
+                self.timesteps[i + 1], self.num_false_positives_per_model[model_name][i + 1]) for i in range(
+                len(self.num_false_positives_per_model[model_name]) - 1))
+            self.num_true_negatives_per_model_files[model_name].writelines("{}, {}\n".format(
+                self.timesteps[i + 1], self.num_true_negatives_per_model[model_name][i + 1]) for i in range(
+                len(self.num_true_negatives_per_model[model_name]) - 1))
+            self.num_false_negatives_per_model_files[model_name].writelines("{}, {}\n".format(
+                self.timesteps[i + 1], self.num_false_negatives_per_model[model_name][i + 1]) for i in range(
+                len(self.num_false_negatives_per_model[model_name]) - 1))
+            self.total_fraud_amounts_detected_per_model_files[model_name].writelines("{}, {}\n".format(
+                self.timesteps[i + 1], self.total_fraud_amounts_detected_per_model[model_name][i + 1]) for i in range(
+                len(self.total_fraud_amounts_detected_per_model[model_name]) - 1))
+
         self.timesteps = [self.timesteps[-1], ]
         self.cumulative_rewards = [self.cumulative_rewards[-1], ]
         self.num_transactions = [self.num_transactions[-1], ]
@@ -146,3 +236,13 @@ class ExperimentSummary:
         self.total_population = [self.total_population[-1], ]
         self.genuine_population = [self.genuine_population[-1], ]
         self.fraud_population = [self.fraud_population[-1], ]
+
+        self.total_fraud_amounts_seen = [self.total_fraud_amounts_seen[-1], ]
+
+        for model_name in self.cs_model_config_names:
+            self.num_true_positives_per_model[model_name] = [self.num_true_positives_per_model[model_name][-1], ]
+            self.num_false_positives_per_model[model_name] = [self.num_false_positives_per_model[model_name][-1], ]
+            self.num_true_negatives_per_model[model_name] = [self.num_true_negatives_per_model[model_name][-1], ]
+            self.num_false_negatives_per_model[model_name] = [self.num_false_negatives_per_model[model_name][-1], ]
+            self.total_fraud_amounts_detected_per_model[model_name] = \
+                [self.total_fraud_amounts_detected_per_model[model_name][-1], ]

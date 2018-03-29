@@ -12,9 +12,19 @@ from authenticators.abstract_authenticator import AbstractAuthenticator
 from collections import defaultdict
 
 
+class CSModelPerformanceSummary:
+
+    def __init__(self):
+        self.num_true_positives = 0
+        self.num_false_positives = 0
+        self.num_true_negatives = 0
+        self.num_false_negatives = 0
+        self.total_fraud_amounts_detected = 0.0
+
+
 class RLAuthenticator(AbstractAuthenticator):
 
-    def __init__(self, agent, state_creator, flat_fee, relative_fee):
+    def __init__(self, agent, state_creator, flat_fee, relative_fee, cs_model_config_names):
         self.agent = agent
         self.state_creator = state_creator
         self.flat_fee = flat_fee
@@ -26,6 +36,12 @@ class RLAuthenticator(AbstractAuthenticator):
         self.num_secondary_auths_blocked_frauds = 0
         self.num_secondary_auths_blocked_genuines = 0
         self.num_secondary_auths_passed_genuines = 0
+
+        self.total_fraud_amounts_seen = 0.0
+
+        self.cs_model_config_names = cs_model_config_names
+        self.cs_model_performance_summaries = \
+            {model_name: CSModelPerformanceSummary() for model_name in cs_model_config_names}
 
     def authorise_transaction(self, customer):
         state_features = self.state_creator.compute_state_vector_from_raw(
@@ -65,6 +81,29 @@ class RLAuthenticator(AbstractAuthenticator):
 
         # take a learning step
         self.agent.learn(state_features, action, reward, customer.card_id)
+
+        # some book-keeping
+        cs_model_preds = state_features[4:]
+
+        if customer.fraudster:
+            self.total_fraud_amounts_seen += state_features[1]
+
+            for i in range(len(self.cs_model_config_names)):
+                summ = self.cs_model_performance_summaries[self.cs_model_config_names[i]]
+
+                if cs_model_preds[i] == 0:
+                    summ.num_false_negatives += 1
+                else:
+                    summ.num_true_positives += 1
+                    summ.total_fraud_amounts_detected += state_features[1]
+        else:
+            for i in range(len(self.cs_model_config_names)):
+                summ = self.cs_model_performance_summaries[self.cs_model_config_names[i]]
+
+                if cs_model_preds[i] == 0:
+                    summ.num_true_negatives += 1
+                else:
+                    summ.num_false_positives += 1
 
         return success
 

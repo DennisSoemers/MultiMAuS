@@ -87,6 +87,9 @@ if __name__ == '__main__':
     # relative fee (multiplied by transaction amount) we take for every genuine transaction
     RELATIVE_FEE = 0.01
 
+    # if True, we'll share trained R models among all seeds with otherwise the same config
+    USE_SEED_AGNOSTIC_MODELS = True
+
     # if True, we'll also profile our running code
     PROFILE = False
 
@@ -103,8 +106,8 @@ if __name__ == '__main__':
     simulator_params['end_date'] = datetime(9999, 12, 31)
     simulator_params['stay_prob'][0] = 0.9      # stay probability for genuine customers
     simulator_params['stay_prob'][1] = 0.99     # stay probability for fraudsters
-    #simulator_params['seed'] = random.randrange(2**31)      # only 2^31 instead of 2^32 because R cant handle big seeds
-    simulator_params['seed'] = 220152506
+    simulator_params['seed'] = random.randrange(2**31)      # only 2^31 instead of 2^32 because R cant handle big seeds
+    #simulator_params['seed'] = 220152506
     seed = simulator_params['seed']
     print(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), ": Running C-Cure prototype with seed = ", seed)
 
@@ -142,9 +145,14 @@ if __name__ == '__main__':
             break
 
     OUTPUT_DIR = os.path.join(OUTPUT_DIR, "config{0:05d}_dir".format(config_idx))
+
+    if USE_SEED_AGNOSTIC_MODELS:
+        OUTPUT_DIR_SHARED_RUNS = OUTPUT_DIR
+
     OUTPUT_DIR = os.path.join(OUTPUT_DIR, 'seed_{}'.format(simulator_params['seed']))
 
-    OUTPUT_DIR_SHARED_RUNS = OUTPUT_DIR
+    if not USE_SEED_AGNOSTIC_MODELS:
+        OUTPUT_DIR_SHARED_RUNS = OUTPUT_DIR
 
     results_run_idx = 0
     while True:
@@ -418,10 +426,11 @@ if __name__ == '__main__':
         feature_learning_data = training_data.iloc[:num_feature_learning_instances]
         model_learning_data = training_data.iloc[num_feature_learning_instances:]
 
+        need_train_models = not os.path.isdir(os.path.join(OUTPUT_DIR_SHARED_RUNS, "Models"))
         # feature engineering
 
         # define feature engineering function that we can run in a different thread without blocking this one
-        def feature_engineering_func(feature_learning_data, model_learning_data, out_list):
+        def feature_engineering_func(feature_learning_data, model_learning_data, out_list, need_train_models):
             global aggregate_feature_constructor
             global apate_graph_feature_constructor
             aggregate_feature_constructor = AggregateFeatures(feature_learning_data)
@@ -429,7 +438,8 @@ if __name__ == '__main__':
             update_feature_constructors_unlabeled(model_learning_data)
 
             # compute features for our model learning data
-            model_learning_data = process_data(model_learning_data)
+            if need_train_models:
+                model_learning_data = process_data(model_learning_data)
 
             # store in out_list so we can retrieve results in main thread
             out_list[0] = aggregate_feature_constructor
@@ -439,7 +449,10 @@ if __name__ == '__main__':
         # create new thread
         out_list = [None] * 3
         feature_eng_thread = threading.Thread(target=feature_engineering_func, name="Feature Eng. Thread",
-                                              args=(feature_learning_data, model_learning_data, out_list),
+                                              args=(feature_learning_data,
+                                                    model_learning_data,
+                                                    out_list,
+                                                    need_train_models),
                                               daemon=True)
         start_time_feature_engineering = time.time()
         feature_eng_thread.start()
@@ -473,7 +486,7 @@ if __name__ == '__main__':
 
             # train offline models in R if our Models directory does not already exist
             start_time_r_model_training = time.time()
-            if not os.path.isdir(os.path.join(OUTPUT_DIR_SHARED_RUNS, "Models")):
+            if need_train_models:
                 # create new process
                 from ccure_prototype import r_model_training
                 train_r_process = multiprocessing.Process(target=r_model_training.train_r_models,
@@ -534,6 +547,9 @@ if __name__ == '__main__':
                     savepath_string += "/"
                 r_loadCSModels = ri.globalenv['loadCSModels']
                 num_r_predictions = int(r_loadCSModels(ri.StrSexpVector((savepath_string, )))[0])
+                r_getModelConfigNames = ri.globalenv['getModelConfigNames']
+                cs_model_config_names = r_getModelConfigNames()
+                cs_model_config_names = [cs_model_config_names[idx] for idx in range(num_r_predictions)]
                 r_predictCSModels = ri.globalenv['predictCSModels']
                 r_predictCSModelsSlow = ri.globalenv['predictCSModelsSlow']
 
@@ -542,8 +558,8 @@ if __name__ == '__main__':
                     #print("feature_vector = ", feature_vector)
                     preds = np.asarray(r_predictCSModels(ri.FloatSexpVector(feature_vector)))
 
-                    if random.random() < 0.025:
-                        # in about 5% of the predictions, also run a slow prediction and make sure it's equal to the
+                    if random.random() < 0.01:
+                        # in about 1% of the predictions, also run a slow prediction and make sure it's equal to the
                         # optimized version
                         slow_preds = np.asarray(r_predictCSModelsSlow(ri.FloatSexpVector(feature_vector)))
 
@@ -554,6 +570,7 @@ if __name__ == '__main__':
                             print("Feature vector: ", feature_vector)
                             print("")
 
+                    preds[np.isnan(preds)] = 0
                     return preds
 
                 # get rid of all fraudsters in training data and replace them with new fraudsters
@@ -618,7 +635,8 @@ if __name__ == '__main__':
                     authenticator_test_phase = RLAuthenticator(
                         agent=TrueOnlineSarsaLambdaAgent(
                             num_actions=2, num_state_features=state_creator.get_num_state_features()),
-                        state_creator=state_creator, flat_fee=FLAT_FEE, relative_fee=RELATIVE_FEE)
+                        state_creator=state_creator, flat_fee=FLAT_FEE, relative_fee=RELATIVE_FEE,
+                        cs_model_config_names=cs_model_config_names)
                     simulator.authenticator = authenticator_test_phase
 
                     # in this dict, we'll store for simulation steps (key = t) lists of transactions that need to be reported
@@ -629,7 +647,8 @@ if __name__ == '__main__':
 
                     with ExperimentSummary(flat_fee=FLAT_FEE,
                                            relative_fee=RELATIVE_FEE,
-                                           output_dir=OUTPUT_DIR) as summary:
+                                           output_dir=OUTPUT_DIR,
+                                           cs_model_config_names=cs_model_config_names) as summary:
 
                         t = 0
 
@@ -715,6 +734,16 @@ if __name__ == '__main__':
                             summary.total_population[-1] = len(simulator.customers) + len(simulator.fraudsters)
                             summary.genuine_population[-1] = len(simulator.customers)
                             summary.fraud_population[-1] = len(simulator.fraudsters)
+
+                            summary.total_fraud_amounts_seen[-1] = authenticator_test_phase.total_fraud_amounts_seen
+                            for m in cs_model_config_names:
+                                model_summ = authenticator_test_phase.cs_model_performance_summaries[m]
+                                summary.num_true_positives_per_model[m][-1] = model_summ.num_true_positives
+                                summary.num_false_positives_per_model[m][-1] = model_summ.num_false_positives
+                                summary.num_true_negatives_per_model[m][-1] = model_summ.num_true_negatives
+                                summary.num_false_negatives_per_model[m][-1] = model_summ.num_false_negatives
+                                summary.total_fraud_amounts_detected_per_model[m][-1] = \
+                                    model_summ.total_fraud_amounts_detected
 
                             if t % UPDATE_SPEED_FREQUENCY_EVAL == 0:
                                 curr_time = time.time()
