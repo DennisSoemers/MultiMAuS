@@ -107,13 +107,16 @@ if __name__ == '__main__':
     simulator_params['stay_prob'][0] = 0.9      # stay probability for genuine customers
     simulator_params['stay_prob'][1] = 0.99     # stay probability for fraudsters
     simulator_params['seed'] = random.randrange(2**31)      # only 2^31 instead of 2^32 because R cant handle big seeds
-    #simulator_params['seed'] = 220152506
+    #simulator_params['seed'] = 2000095993
     seed = simulator_params['seed']
     print(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), ": Running C-Cure prototype with seed = ", seed)
 
     simulator_params['num_fraudsters'] = 300
     simulator_params['stay_prob'][0] = 0.9      # genuine
     simulator_params['stay_prob'][1] = 0.96     # fraud
+
+    simulator_params['flat_fee'] = FLAT_FEE
+    simulator_params['relative_fee'] = RELATIVE_FEE
 
     # we assume fraudulent cases get reported after 6 simulator steps (hours)   TODO can make this much more fancy
     FRAUD_REPORT_TIME = 6
@@ -744,6 +747,15 @@ if __name__ == '__main__':
                                 summary.num_false_negatives_per_model[m][-1] = model_summ.num_false_negatives
                                 summary.total_fraud_amounts_detected_per_model[m][-1] = \
                                     model_summ.total_fraud_amounts_detected
+                                summary.num_agreements_per_model[m][-1] = model_summ.num_agreements
+                                summary.num_agreements_true_positive_per_model[m][-1] = \
+                                    model_summ.num_agreements_true_positive
+                                summary.num_agreements_false_positive_per_model[m][-1] = \
+                                    model_summ.num_agreements_false_positive
+                                summary.num_agreements_true_negative_per_model[m][-1] = \
+                                    model_summ.num_agreements_true_negative
+                                summary.num_agreements_false_negative_per_model[m][-1] = \
+                                    model_summ.num_agreements_false_negative
 
                             if t % UPDATE_SPEED_FREQUENCY_EVAL == 0:
                                 curr_time = time.time()

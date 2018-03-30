@@ -40,6 +40,11 @@ files_to_plot_per_model = [
     'num_true_negatives',
     'num_false_negatives',
     'total_fraud_amounts_detected',
+    'num_agreements_all',
+    'num_agreements_true_positive',
+    'num_agreements_false_positive',
+    'num_agreements_true_negative',
+    'num_agreements_false_negative',
 ]
 
 

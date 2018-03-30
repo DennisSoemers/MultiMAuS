@@ -20,6 +20,11 @@ class CSModelPerformanceSummary:
         self.num_true_negatives = 0
         self.num_false_negatives = 0
         self.total_fraud_amounts_detected = 0.0
+        self.num_agreements = 0
+        self.num_agreements_true_positive = 0
+        self.num_agreements_false_positive = 0
+        self.num_agreements_true_negative = 0
+        self.num_agreements_false_negative = 0
 
 
 class RLAuthenticator(AbstractAuthenticator):
@@ -93,17 +98,33 @@ class RLAuthenticator(AbstractAuthenticator):
 
                 if cs_model_preds[i] == 0:
                     summ.num_false_negatives += 1
+
+                    if action == 0:
+                        summ.num_agreements += 1
+                        summ.num_agreements_false_negative += 1
                 else:
                     summ.num_true_positives += 1
                     summ.total_fraud_amounts_detected += state_features[1]
+
+                    if action == 1:
+                        summ.num_agreements += 1
+                        summ.num_agreements_true_positive += 1
         else:
             for i in range(len(self.cs_model_config_names)):
                 summ = self.cs_model_performance_summaries[self.cs_model_config_names[i]]
 
                 if cs_model_preds[i] == 0:
                     summ.num_true_negatives += 1
+
+                    if action == 0:
+                        summ.num_agreements += 1
+                        summ.num_agreements_true_negative += 1
                 else:
                     summ.num_false_positives += 1
+
+                    if action == 1:
+                        summ.num_agreements += 1
+                        summ.num_agreements_false_positive += 1
 
         return success
 
