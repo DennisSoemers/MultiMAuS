@@ -44,6 +44,9 @@ class AbstractCustomer(Agent,  metaclass=ABCMeta):
         # variable tells us whether the customer wants to stay after current transaction
         self.stay = True
 
+        # tracking how many transactions this customer has attempted in their life
+        self.total_num_transactions = 0
+
     def step(self):
         """ 
         This is called in each simulation step (i.e., one hour).
@@ -71,6 +74,16 @@ class AbstractCustomer(Agent,  metaclass=ABCMeta):
             # process current transaction
             self.curr_trans_success = self.model.process_transaction(self)
 
+            self.total_num_transactions += 1
+
+            if self.model.track_max_values:
+                self.model.max_abs_transaction_amount = \
+                    max(self.model.max_abs_transaction_amount, self.curr_amount)
+                self.model.max_num_trans_single_card = \
+                    max(self.model.max_num_trans_single_card, self.total_num_transactions)
+                self.model.max_num_timesteps_between_trans = \
+                    max(self.model.max_num_timesteps_between_trans, self.time_since_last_transaction)
+
             if not self.curr_trans_success:
                 self.active = False
 
@@ -96,7 +109,7 @@ class AbstractCustomer(Agent,  metaclass=ABCMeta):
                 self.time_since_last_transaction += 1
 
         if not self.stay:
-            self.model.customer_leave_callback(self.card_id)
+            self.model.pending_leave(self)
 
     def request_transaction(self):
         self.model.authorise_transaction(self)

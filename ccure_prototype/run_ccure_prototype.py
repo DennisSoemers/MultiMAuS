@@ -27,6 +27,7 @@ from ccure_prototype.experiment_summary import ExperimentSummary
 from ccure_prototype.gui.control_frame import create_control_frame, is_control_frame_alive
 from ccure_prototype.rl_authenticator import RLAuthenticator
 from ccure_prototype.rl_authenticator import StateCreator
+from ccure_prototype.rl.concurrent_true_online_sarsa_lambda_agent import ConcurrentTrueOnlineSarsaLambdaAgent
 from ccure_prototype.rl.true_online_sarsa_lambda_agent import TrueOnlineSarsaLambdaAgent
 from data.features.aggregate_features import AggregateFeatures
 from data.features.apate_graph_features import ApateGraphFeatures
@@ -78,7 +79,8 @@ if __name__ == '__main__':
     #NUM_SIM_STEPS_SKIP = 0
 
     # number of steps to simulate for evaluation
-    NUM_SIM_STEPS_EVALUATION = 30_000
+    #NUM_SIM_STEPS_EVALUATION = 30_000
+    NUM_SIM_STEPS_EVALUATION = 600
     #NUM_SIM_STEPS_EVALUATION = 200
     #NUM_SIM_STEPS_EVALUATION = 0
 
@@ -89,6 +91,9 @@ if __name__ == '__main__':
 
     # if True, we'll share trained R models among all seeds with otherwise the same config
     USE_SEED_AGNOSTIC_MODELS = True
+
+    #RL_AGENT = "TrueOnlineSarsaLambda"
+    RL_AGENT = "ConcurrentTrueOnlineSarsaLambda"
 
     # if True, we'll also profile our running code
     PROFILE = False
@@ -106,8 +111,8 @@ if __name__ == '__main__':
     simulator_params['end_date'] = datetime(9999, 12, 31)
     simulator_params['stay_prob'][0] = 0.9      # stay probability for genuine customers
     simulator_params['stay_prob'][1] = 0.99     # stay probability for fraudsters
-    simulator_params['seed'] = random.randrange(2**31)      # only 2^31 instead of 2^32 because R cant handle big seeds
-    #simulator_params['seed'] = 2000095993
+    #simulator_params['seed'] = random.randrange(2**31)      # only 2^31 instead of 2^32 because R cant handle big seeds
+    simulator_params['seed'] = 1224966315
     seed = simulator_params['seed']
     print(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), ": Running C-Cure prototype with seed = ", seed)
 
@@ -118,8 +123,8 @@ if __name__ == '__main__':
     simulator_params['flat_fee'] = FLAT_FEE
     simulator_params['relative_fee'] = RELATIVE_FEE
 
-    # we assume fraudulent cases get reported after 6 simulator steps (hours)   TODO can make this much more fancy
-    FRAUD_REPORT_TIME = 6
+    # we assume fraudulent cases get reported after this many simulator steps (hours)   TODO can make this much more fancy
+    FRAUD_REPORT_TIME = 72
 
     # -------------------------------------------
     # output
@@ -156,6 +161,8 @@ if __name__ == '__main__':
 
     if not USE_SEED_AGNOSTIC_MODELS:
         OUTPUT_DIR_SHARED_RUNS = OUTPUT_DIR
+
+    OUTPUT_DIR = os.path.join(OUTPUT_DIR, RL_AGENT)
 
     results_run_idx = 0
     while True:
@@ -310,9 +317,9 @@ if __name__ == '__main__':
         return log
 
 
-    def on_customer_leave(card_id):
+    def on_customer_leave(card_id, customer):
         if authenticator_test_phase is not None:
-            authenticator_test_phase.agent.on_customer_leave(card_id)
+            authenticator_test_phase.agent.on_customer_leave(card_id, customer)
 
 
     # -------------------------------------------
@@ -564,6 +571,7 @@ if __name__ == '__main__':
                     if random.random() < 0.01:
                         # in about 1% of the predictions, also run a slow prediction and make sure it's equal to the
                         # optimized version
+                        # TODO remove this
                         slow_preds = np.asarray(r_predictCSModelsSlow(ri.FloatSexpVector(feature_vector)))
 
                         if not np.array_equal(preds, slow_preds):
@@ -631,15 +639,35 @@ if __name__ == '__main__':
                     model_learning_data = None
                     skip_data = None
 
+                    # stop tracking bounds for scaling RL features
+                    simulator.track_max_values = False
+
                     # create our RL-based authenticator and add it to the simulator
                     state_creator = StateCreator(make_predictions_func=make_predictions,
                                                  feature_processing_func=process_data,
                                                  num_models=num_r_predictions)
+
+                    if RL_AGENT == "TrueOnlineSarsaLambda":
+                        rl_agent = TrueOnlineSarsaLambdaAgent(
+                            num_actions=2,
+                            num_state_features=state_creator.get_num_state_features()
+                        )
+                    elif RL_AGENT == "ConcurrentTrueOnlineSarsaLambda":
+                        rl_agent = ConcurrentTrueOnlineSarsaLambdaAgent(
+                            num_real_actions=2, num_actions=3,
+                            num_state_features=state_creator.get_num_state_features()
+                        )
+                    else:
+                        print("UNKNOWN RL AGENT: ", RL_AGENT)
+                        rl_agent = None
+
                     authenticator_test_phase = RLAuthenticator(
-                        agent=TrueOnlineSarsaLambdaAgent(
-                            num_actions=2, num_state_features=state_creator.get_num_state_features()),
+                        agent=rl_agent,
                         state_creator=state_creator, flat_fee=FLAT_FEE, relative_fee=RELATIVE_FEE,
-                        cs_model_config_names=cs_model_config_names)
+                        cs_model_config_names=cs_model_config_names,
+                        simulator=simulator
+                    )
+
                     simulator.authenticator = authenticator_test_phase
 
                     # in this dict, we'll store for simulation steps (key = t) lists of transactions that need to be reported
@@ -651,7 +679,8 @@ if __name__ == '__main__':
                     with ExperimentSummary(flat_fee=FLAT_FEE,
                                            relative_fee=RELATIVE_FEE,
                                            output_dir=OUTPUT_DIR,
-                                           cs_model_config_names=cs_model_config_names) as summary:
+                                           cs_model_config_names=cs_model_config_names,
+                                           rl_agent=rl_agent) as summary:
 
                         t = 0
 

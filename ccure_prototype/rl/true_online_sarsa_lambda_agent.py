@@ -73,7 +73,13 @@ class TrueOnlineSarsaLambdaAgent:
         self.online_normalization = online_normalization
         self.feature_bounds = np.ones(num_actions * num_state_features)
 
-    def choose_action_eps_greedy(self, state_features, epsilon=0.05):       # TODO decaying epsilon
+        # following currently only tracked in cases where we exploit, not in cases where we explore
+        self.genuine_q_values_no_auth = list()
+        self.genuine_q_values_auth = list()
+        self.fraud_q_values_no_auth = list()
+        self.fraud_q_values_auth = list()
+
+    def choose_action_eps_greedy(self, state_features, card_id, t, transaction_date, fraud, epsilon=0.05):       # TODO decaying epsilon
         if np.random.random_sample() < epsilon:
             return int(np.random.random_sample() * self.num_actions)
         else:
@@ -95,6 +101,17 @@ class TrueOnlineSarsaLambdaAgent:
                     best_actions = [a, ]
                 elif q == best_q:
                     best_actions.append(a)
+
+                if a == 0:
+                    if fraud:
+                        self.fraud_q_values_no_auth.append(q)
+                    else:
+                        self.genuine_q_values_no_auth.append(q)
+                else:
+                    if fraud:
+                        self.fraud_q_values_auth.append(q)
+                    else:
+                        self.genuine_q_values_auth.append(q)
 
             idx = int(np.random.random_sample() * len(best_actions))
             return best_actions[idx]
@@ -150,7 +167,7 @@ class TrueOnlineSarsaLambdaAgent:
         self.z_map[card_id] = z
         self.z_bounds_map[card_id] = np.copy(self.feature_bounds)
 
-    def on_customer_leave(self, card_id):
+    def on_customer_leave(self, card_id, customer):
         if card_id in self.z_map:
             self.z_map.pop(card_id)
             self.z_bounds_map.pop(card_id)

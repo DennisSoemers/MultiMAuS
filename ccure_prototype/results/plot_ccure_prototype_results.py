@@ -14,8 +14,12 @@ config_to_plot = 0
 
 # list of all the seeds for which we wish to plot results. empty list = all seeds
 seeds_to_plot = [
-    #605462308,
+    #2110830925,
+    1224966315,
 ]
+
+RL_agent_to_plot = "TrueOnlineSarsaLambda"
+#RL_agent_to_plot = "ConcurrentTrueOnlineSarsaLambda"
 
 # filenames (without .csv extension) for which we want to create subplots
 files_to_plot = [
@@ -154,11 +158,13 @@ if __name__ == '__main__':
     else:
         seed_dirs = [os.path.join(config_dir, 'seed_{}'.format(seed)) for seed in seeds_to_plot]
 
-    run_dirs = [os.path.join(seed_dir, run_dir)
-                for seed_dir in seed_dirs for run_dir in os.listdir(seed_dir) if run_dir.startswith('run')]
+    rl_agent_dirs = [os.path.join(seed_dir, RL_agent_to_plot) for seed_dir in seed_dirs]
 
-    fig = plt.figure(figsize=(16, 8))
-    fig.suptitle("C-Cure Prototype Results")
+    run_dirs = [os.path.join(rl_agent_dir, run_dir)
+                for rl_agent_dir in rl_agent_dirs for run_dir in os.listdir(rl_agent_dir) if run_dir.startswith('run')]
+
+    fig = plt.figure(figsize=(18, 9))
+    fig.suptitle("C-Cure Prototype Results - {}".format(RL_agent_to_plot))
 
     subfigure_idx = 1
 
@@ -173,8 +179,8 @@ if __name__ == '__main__':
     num_subfigure_cols = min(4, total_num_subplots)
     num_subfigure_rows = ceil(total_num_subplots / num_subfigure_cols)
 
-    fig = plt.figure(figsize=(16, 8))
-    fig.suptitle("C-Cure Prototype Results - Cost-Sensitive Models")
+    fig = plt.figure(figsize=(18, 9))
+    fig.suptitle("C-Cure Prototype Results - {} - Cost-Sensitive Models".format(RL_agent_to_plot))
 
     subfigure_idx = 1
 

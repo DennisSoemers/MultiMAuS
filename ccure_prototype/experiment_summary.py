@@ -10,7 +10,7 @@ import os
 
 class ExperimentSummary:
 
-    def __init__(self, flat_fee, relative_fee, output_dir, cs_model_config_names, write_frequency=200):
+    def __init__(self, flat_fee, relative_fee, output_dir, cs_model_config_names, rl_agent, write_frequency=200):
         self.cs_model_config_names = cs_model_config_names
 
         self.timesteps = [0, ]
@@ -56,6 +56,11 @@ class ExperimentSummary:
 
         self.total_fraud_amounts_seen_filepath = os.path.join(output_dir, "total_fraud_amounts_seen.csv")
 
+        self.genuine_q_values_no_auth_filepath = os.path.join(output_dir, "q_values_genuine_no_auth.csv")
+        self.genuine_q_values_auth_filepath = os.path.join(output_dir, "q_values_genuine_auth.csv")
+        self.fraud_q_values_no_auth_filepath = os.path.join(output_dir, "q_values_fraud_no_auth.csv")
+        self.fraud_q_values_auth_filepath = os.path.join(output_dir, "q_values_fraud_auth.csv")
+
         self.num_true_positives_per_model_filepaths = {
             model_name: os.path.join(output_dir, "num_true_positives_{}.csv".format(
                 model_name.replace(":", "_").replace("/", "_")))
@@ -96,6 +101,8 @@ class ExperimentSummary:
             model_name: os.path.join(output_dir, "num_agreements_false_negative_{}.csv".format(
                 model_name.replace(":", "_").replace("/", "_")))
             for model_name in cs_model_config_names}
+
+        self.rl_agent = rl_agent
 
         self.flat_fee = flat_fee
         self.relative_fee = relative_fee
@@ -179,6 +186,32 @@ class ExperimentSummary:
             self.num_agreements_false_positive_per_model_files[model_name].close()
             self.num_agreements_true_negative_per_model_files[model_name].close()
             self.num_agreements_false_negative_per_model_files[model_name].close()
+
+        # write Q values of RL agent
+        if self.rl_agent is not None:
+            with open(self.genuine_q_values_no_auth_filepath, 'x') as file:
+                file.writelines("{}, {}\n".format(
+                    i, self.rl_agent.genuine_q_values_no_auth[i]) for i in range(
+                    len(self.rl_agent.genuine_q_values_no_auth)
+                ))
+
+            with open(self.genuine_q_values_auth_filepath, 'x') as file:
+                file.writelines("{}, {}\n".format(
+                    i, self.rl_agent.genuine_q_values_auth[i]) for i in range(
+                    len(self.rl_agent.genuine_q_values_auth)
+                ))
+
+            with open(self.fraud_q_values_no_auth_filepath, 'x') as file:
+                file.writelines("{}, {}\n".format(
+                    i, self.rl_agent.fraud_q_values_no_auth[i]) for i in range(
+                    len(self.rl_agent.fraud_q_values_no_auth)
+                ))
+
+            with open(self.fraud_q_values_auth_filepath, 'x') as file:
+                file.writelines("{}, {}\n".format(
+                    i, self.rl_agent.fraud_q_values_auth[i]) for i in range(
+                    len(self.rl_agent.fraud_q_values_auth)
+                ))
 
         return exc_val is None
 

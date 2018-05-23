@@ -4,10 +4,14 @@ from simulator.log_collector import LogCollector
 from simulator import parameters
 from mesa import Model
 from authenticators.simple_authenticators import NeverSecondAuthenticator
+from ccure_prototype.rl_authenticator import RLAuthenticator
+from ccure_prototype.rl.concurrent_true_online_sarsa_lambda_agent import ConcurrentTrueOnlineSarsaLambdaAgent
 from simulator.customers import GenuineCustomer, FraudulentCustomer
 from datetime import timedelta
 from pytz import timezone, country_timezones
 import numpy as np
+
+from icecream import ic
 
 
 class TransactionModel(Model):
@@ -46,6 +50,8 @@ class TransactionModel(Model):
         self.customers = self.initialise_customers()
         self.fraudsters = self.initialise_fraudsters()
 
+        self.pending_leave_customers = []
+
         # set up a scheduler
         self.schedule = scheduler if scheduler is not None else RandomActivation(self)
 
@@ -54,10 +60,21 @@ class TransactionModel(Model):
 
         self.customer_leave_callbacks = []
 
-    def customer_leave_callback(self, card_id):
+        # can use these for scaling features in RL
+        self.max_abs_transaction_amount = 1.0
+        self.max_num_trans_single_card = 1
+        self.max_num_timesteps_between_trans = 1
+
+        # we'll only track values for the variables above for as long as this is True
+        self.track_max_values = True
+
+    def customer_leave_callback(self, card_id, customer):
         if card_id is not None:
             for callback in self.customer_leave_callbacks:
-                callback(card_id)
+                callback(card_id, customer)
+
+    def pending_leave(self, customer):
+        self.pending_leave_customers.append(customer)
 
     @staticmethod
     def initialise_log_collector():
@@ -113,6 +130,57 @@ class TransactionModel(Model):
 
         # migration of customers/fraudsters
         self.customer_migration()
+
+        # handle customers who are pending to leave
+        remaining_pending_leavers = []
+        for c in self.pending_leave_customers:
+            # != 0 because we don't care about leaving customers who have never done a transaction
+            if c.time_since_last_transaction != 0 and c.time_since_last_transaction < 672:
+                remaining_pending_leavers.append(c)
+
+                if c.time_since_last_transaction % 24 == 0:
+                    if isinstance(self.authenticator, RLAuthenticator) \
+                            and isinstance(self.authenticator.agent, ConcurrentTrueOnlineSarsaLambdaAgent):
+
+                        if self.authenticator.agent.is_card_id_known(c.card_id):
+                            # only need to run this learning step if it's a customer we actually know in the RL part
+                            # (which is not the case for those who decided to leave already during training/gap data)
+                            self.authenticator.agent.fake_learn(
+                                state_features=self.authenticator.scale_state_features(
+                                    self.authenticator.state_creator.compute_inactive_state(
+                                        c.card_id,
+                                        c.time_since_last_transaction,
+                                        self.authenticator
+                                    )),
+                                action=2,
+                                card_id=c.card_id,
+                                t=self.schedule.time,
+                                reward=0.0
+                            )
+
+                c.time_since_last_transaction += 1
+            else:
+                if isinstance(self.authenticator, RLAuthenticator) \
+                        and isinstance(self.authenticator.agent, ConcurrentTrueOnlineSarsaLambdaAgent):
+
+                    if self.authenticator.agent.is_card_id_known(c.card_id):
+                        self.authenticator.agent.fake_learn(
+                            state_features=self.authenticator.scale_state_features(
+                                self.authenticator.state_creator.compute_inactive_state(
+                                    c.card_id,
+                                    c.time_since_last_transaction,
+                                    self.authenticator
+                                )),
+                            action=2,
+                            card_id=c.card_id,
+                            t=self.schedule.time,
+                            reward=0.0,
+                            terminal=True
+                        )
+
+                self.customer_leave_callback(c.card_id, c)     # TODO final terminal state learning step
+
+        self.pending_leave_customers = remaining_pending_leavers
 
         # update time
         self.curr_global_date = self.curr_global_date + timedelta(hours=1)

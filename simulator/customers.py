@@ -159,6 +159,8 @@ class GenuineCustomer(BaseCustomer):
         # instantiate the customer's satisfaction
         self.satisfaction = satisfaction
 
+        self.card_stolen = False
+
     def stay_after_transaction(self):
         stay_prob = self.satisfaction * self.params['stay_prob'][self.fraudster]
         return (1-stay_prob) <= self.random_state.uniform(0, 1)
@@ -254,10 +256,14 @@ class FraudulentCustomer(BaseCustomer):
                 card = customer.card_id
                 self.country = customer.country
                 self.currency = customer.currency
+                self.stole_card = True
+                customer.card_stolen = True
             except ValueError:
                 card = super().initialise_card_id()
+                self.stole_card = False
         else:
             card = super().initialise_card_id()
+            self.stole_card = False
         return card
 
     def give_authentication(self):

@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 
 from authenticators.abstract_authenticator import AbstractAuthenticator
+from ccure_prototype.rl.true_online_sarsa_lambda_agent import TrueOnlineSarsaLambdaAgent
 from collections import defaultdict
 
 
@@ -29,13 +30,16 @@ class CSModelPerformanceSummary:
 
 class RLAuthenticator(AbstractAuthenticator):
 
-    def __init__(self, agent, state_creator, flat_fee, relative_fee, cs_model_config_names):
+    def __init__(self, agent, state_creator, flat_fee, relative_fee, cs_model_config_names, simulator):
         self.agent = agent
         self.state_creator = state_creator
         self.flat_fee = flat_fee
         self.relative_fee = relative_fee
 
         self.secondary_auths_per_card = defaultdict(int)
+        self.num_unauthenticated_transactions_in_a_row_per_card = defaultdict(int)
+        self.successful_trans_per_card = defaultdict(int)
+        self.avg_reward_per_trans = defaultdict(float)
 
         self.num_secondary_auths = 0
         self.num_secondary_auths_blocked_frauds = 0
@@ -48,11 +52,33 @@ class RLAuthenticator(AbstractAuthenticator):
         self.cs_model_performance_summaries = \
             {model_name: CSModelPerformanceSummary() for model_name in cs_model_config_names}
 
+        self.simulator = simulator
+
     def authorise_transaction(self, customer):
         state_features = self.state_creator.compute_state_vector_from_raw(
-            customer, self.secondary_auths_per_card[customer.card_id])
-        action = self.agent.choose_action_eps_greedy(state_features)
+            customer,
+            self.secondary_auths_per_card[customer.card_id],
+            self.num_unauthenticated_transactions_in_a_row_per_card[customer.card_id],
+            self.avg_reward_per_trans[customer.card_id]
+        )
+
+        scaled_state_features = self.scale_state_features(state_features)
+
+        action = self.agent.choose_action_eps_greedy(
+            scaled_state_features,
+            customer.card_id,
+            t=customer.model.schedule.time,
+            transaction_date=customer.model.curr_global_date.replace(tzinfo=None),
+            fraud=customer.fraudster
+        )
+
         success = True
+
+        if isinstance(self.agent, TrueOnlineSarsaLambdaAgent):
+            # TODO this is the old agent with bad theoretical foundations, remove it
+            using_old_agent = True
+        else:
+            using_old_agent = False
 
         if action == 1:
             # ask secondary authentication
@@ -60,6 +86,7 @@ class RLAuthenticator(AbstractAuthenticator):
             self.num_secondary_auths += 1
 
             self.secondary_auths_per_card[customer.card_id] += 1
+            self.num_unauthenticated_transactions_in_a_row_per_card[customer.card_id] = 0
 
             if authentication is None:
                 # customer refused to authenticate --> reward = 0
@@ -74,18 +101,34 @@ class RLAuthenticator(AbstractAuthenticator):
                 # successful secondary authentication, so we know for sure it's a genuine transaction
                 reward = self.compute_fees(state_features[1])
                 self.num_secondary_auths_passed_genuines += 1
+
+                curr_avg_reward = self.avg_reward_per_trans[customer.card_id]
+                curr_num_trans = self.successful_trans_per_card[customer.card_id]
+
+                self.avg_reward_per_trans[customer.card_id] = \
+                    ((curr_avg_reward * curr_num_trans) + reward) / (curr_num_trans + 1)
+
+                self.successful_trans_per_card[customer.card_id] += 1
         else:
             # did not ask for secondary authentication, will by default assume always a successful genuine transaction
             reward = self.compute_fees(state_features[1])
 
-        time_since_last_transaction = state_features[2]
-        if time_since_last_transaction > 0:
-            # divide reward by time since last transaction, because rewards in episodes with infrequent rewards are
-            # less important than rewards in episodes with frequent rewards
-            reward /= time_since_last_transaction
+            self.num_unauthenticated_transactions_in_a_row_per_card[customer.card_id] += 1
+            self.successful_trans_per_card[customer.card_id] += 1
 
-        # take a learning step
-        self.agent.learn(state_features, action, reward, customer.card_id)
+        if using_old_agent:
+            time_since_last_transaction = state_features[2]
+            if time_since_last_transaction > 0:
+                # divide reward by time since last transaction, because rewards in episodes with infrequent rewards are
+                # less important than rewards in episodes with frequent rewards
+                reward /= time_since_last_transaction
+
+        if using_old_agent:
+            # take a learning step
+            self.agent.learn(state_features, action, reward, customer.card_id)
+
+        if not using_old_agent:
+            self.agent.register_reward(reward, customer.card_id)
 
         # some book-keeping
         cs_model_preds = state_features[4:]
@@ -131,6 +174,20 @@ class RLAuthenticator(AbstractAuthenticator):
     def compute_fees(self, amount):
         return self.flat_fee + self.relative_fee * amount
 
+    def scale_state_features(self, state_features):
+        state_features = np.copy(state_features)
+
+        if not isinstance(self.agent, TrueOnlineSarsaLambdaAgent):      # TODO check is for old agent only
+            state_features[1] /= self.simulator.max_abs_transaction_amount
+            state_features[5] /= self.simulator.max_abs_transaction_amount
+
+            state_features[3] /= self.simulator.max_num_trans_single_card
+            state_features[4] /= self.simulator.max_num_trans_single_card
+
+            state_features[2] /= self.simulator.max_num_timesteps_between_trans
+
+        return state_features
+
     def update_fraudulent(self, transaction):
         """
         Updates the RL agent with new information that the given transaction turns out to be fraudulent.
@@ -148,23 +205,74 @@ class RLAuthenticator(AbstractAuthenticator):
         :param transaction:
         :return:
         """
+        if isinstance(self.agent, TrueOnlineSarsaLambdaAgent):
+            # TODO this is the old agent with bad theoretical foundations, remove it
+            using_old_agent = True
+        else:
+            using_old_agent = False
+
         transaction_df = pd.DataFrame([transaction])
         df_with_features = self.state_creator.feature_processing_func(transaction_df)
         transaction_row = df_with_features.iloc[0]
         state_features = self.state_creator.compute_state_vector_from_features(
-            transaction_row, self.secondary_auths_per_card[transaction.CardID])
+            transaction_row,
+            self.secondary_auths_per_card[transaction.CardID],
+            self.num_unauthenticated_transactions_in_a_row_per_card[transaction.CardID],
+            self.avg_reward_per_trans[transaction.CardID]
+        )
+
+        scaled_state_features = self.scale_state_features(state_features)
 
         # we lose (= negative reward) the full transaction amount, and the fees we previously mistakenly assumed to
         # have been rewards
         reward = -(state_features[1] + self.compute_fees(state_features[1]))
 
-        time_since_last_transaction = state_features[2]
-        if time_since_last_transaction > 0:
-            # divide reward by time since last transaction, because rewards in episodes with infrequent rewards are
-            # less important than rewards in episodes with frequent rewards
-            reward /= time_since_last_transaction
+        curr_avg_card_reward = self.avg_reward_per_trans[transaction.CardID]
+        num_card_trans = self.successful_trans_per_card[transaction.CardID]
+        self.avg_reward_per_trans[transaction.CardID] = \
+            ((curr_avg_card_reward * num_card_trans) + reward) / num_card_trans
 
-        self.agent.learn(state_features=state_features, action=0, reward=reward, card_id=transaction.CardID)
+        if using_old_agent:
+            time_since_last_transaction = state_features[2]
+            if time_since_last_transaction > 0:
+                # divide reward by time since last transaction, because rewards in episodes with infrequent rewards are
+                # less important than rewards in episodes with frequent rewards
+                reward /= time_since_last_transaction
+
+        if not using_old_agent and transaction.Global_Date == self.agent.get_last_date(transaction.CardID):
+
+            # in this case we can simply modify the most recently registered reward, we didn't learn from it yet
+            self.agent.reset_fraud_reward(card_id=transaction.CardID, reward=-state_features[1])
+
+        elif not using_old_agent:
+            self.agent.fake_learn(
+                state_features=scaled_state_features,
+                action=0,
+                card_id=transaction.CardID,
+                t=self.simulator.schedule.time,
+                reward=reward
+            )
+
+            # immediately take another learning step with an inactive state,
+            # so that we can learn from the discovered fraud ASAP (don't wait until we actually reach a new state)
+            self.agent.fake_learn(
+                state_features=self.scale_state_features(self.state_creator.compute_inactive_state(
+                    transaction.CardID,
+                    0,
+                    self
+                )),
+                action=2,
+                card_id=transaction.CardID,
+                t=self.simulator.schedule.time,
+                reward=0.0
+            )
+        else:
+            self.agent.learn(
+                state_features=scaled_state_features,
+                action=0,
+                reward=reward,
+                card_id=transaction.CardID
+            )
 
 
 class StateCreator:
@@ -173,9 +281,11 @@ class StateCreator:
         self.make_predictions_func = make_predictions_func
         self.feature_processing_func = feature_processing_func
 
-        self.num_state_features = 4 + num_models
+        self.num_state_features = 6 + num_models
 
-    def compute_state_vector_from_raw(self, customer, num_secondary_auths_card_id):
+    def compute_state_vector_from_raw(
+            self, customer,
+            num_secondary_auths_card_id, num_unauthenticated_transactions_card_id, avg_reward_per_trans):
         """
         Uses the given customer's current properties to create a feature vector.
 
@@ -184,9 +294,6 @@ class StateCreator:
         the processed feature vector which can be used by trained models to make predictions.
 
         Some code duplication here from the log_collector used by the simulator to generate data logs
-
-        :param customer:
-        :return:
         """
         multi_index = pd.MultiIndex.from_arrays([[0], [customer.unique_id]], names=["Step", "AgentID"])
         raw_transaction_df = pd.DataFrame({
@@ -225,15 +332,21 @@ class StateCreator:
 
         # we don't want to use all of the features above for the Reinforcement Learner, but we do want to pass
         # them into offline trained models and use their outputs as features
-        return self.compute_state_vector_from_features(transaction_row, num_secondary_auths_card_id)
+        return self.compute_state_vector_from_features(
+            transaction_row,
+            num_secondary_auths_card_id,
+            num_unauthenticated_transactions_card_id,
+            avg_reward_per_trans
+        )
 
-    def compute_state_vector_from_features(self, feature_vector, num_secondary_auths_card_id):
+    def compute_state_vector_from_features(
+            self, feature_vector,
+            num_secondary_auths_card_id,
+            num_unauthenticated_transactions_card_id,
+            avg_reward_per_trans
+    ):
         """
         Computes state vector from a vector with features
-
-        :param feature_vector:
-        :param card_id:
-        :return:
         """
         state_features = []
 
@@ -241,6 +354,8 @@ class StateCreator:
         state_features.append(feature_vector.Amount)
         state_features.append(feature_vector.TimeSinceLastTransaction)
         state_features.append(num_secondary_auths_card_id)
+        state_features.append(num_unauthenticated_transactions_card_id)
+        state_features.append(avg_reward_per_trans)
 
         predictions = self.make_predictions_func(feature_vector.values)
         #print(predictions)
@@ -249,6 +364,27 @@ class StateCreator:
         #if not self.num_state_features == len(state_features):
         #    print(predictions)
         #    print(state_features)
+
+        assert self.num_state_features == len(state_features)
+        return np.array(state_features)
+
+    def compute_inactive_state(
+            self,
+            card_id,
+            time_since_last_transaction,
+            authenticator
+    ):
+        state_features = []
+
+        state_features.append(1.0)  # intercept
+        state_features.append(0.0)  # Amount
+        state_features.append(time_since_last_transaction)
+        state_features.append(authenticator.secondary_auths_per_card[card_id])
+        state_features.append(authenticator.num_unauthenticated_transactions_in_a_row_per_card[card_id])
+        state_features.append(authenticator.avg_reward_per_trans[card_id])
+
+        predictions = [0.0] * (self.num_state_features - len(state_features))
+        state_features.extend(predictions)
 
         assert self.num_state_features == len(state_features)
         return np.array(state_features)
