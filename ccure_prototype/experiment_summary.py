@@ -7,8 +7,6 @@ for experiments
 
 import os
 
-from ccure_prototype.rl.true_online_sarsa_lambda_agent import TrueOnlineSarsaLambdaAgent
-
 from icecream import ic
 
 
@@ -33,10 +31,7 @@ class ExperimentSummary:
 
         self.total_fraud_amounts_seen = [0.0, ]
 
-        if isinstance(rl_agent, TrueOnlineSarsaLambdaAgent):
-            self.num_actions = 2
-        else:
-            self.num_actions = 3
+        self.num_actions = 3
 
         current_rl_weights = rl_agent.get_weights()
         self.num_weights_per_action = int(current_rl_weights.shape[0] / self.num_actions)

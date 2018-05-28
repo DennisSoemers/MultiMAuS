@@ -9,7 +9,6 @@ import numpy as np
 import pandas as pd
 
 from authenticators.abstract_authenticator import AbstractAuthenticator
-from ccure_prototype.rl.true_online_sarsa_lambda_agent import TrueOnlineSarsaLambdaAgent
 from collections import defaultdict
 
 
@@ -76,12 +75,6 @@ class RLAuthenticator(AbstractAuthenticator):
 
         success = True
 
-        if isinstance(self.agent, TrueOnlineSarsaLambdaAgent):
-            # TODO this is the old agent with bad theoretical foundations, remove it
-            using_old_agent = True
-        else:
-            using_old_agent = False
-
         if action == 1:
             # ask secondary authentication
             authentication = customer.give_authentication()
@@ -119,19 +112,7 @@ class RLAuthenticator(AbstractAuthenticator):
             self.num_unauthenticated_transactions_in_a_row_per_card[customer.card_id] += 1
             self.successful_trans_per_card[customer.card_id] += 1
 
-        if using_old_agent:
-            time_since_last_transaction = state_features[2]
-            if time_since_last_transaction > 0:
-                # divide reward by time since last transaction, because rewards in episodes with infrequent rewards are
-                # less important than rewards in episodes with frequent rewards
-                reward /= time_since_last_transaction
-
-        if using_old_agent:
-            # take a learning step
-            self.agent.learn(state_features, action, reward, customer.card_id)
-
-        if not using_old_agent:
-            self.agent.register_reward(reward, customer.card_id)
+        self.agent.register_reward(reward, customer.card_id)
 
         # some book-keeping
         cs_model_preds = state_features[4:]
@@ -180,15 +161,14 @@ class RLAuthenticator(AbstractAuthenticator):
     def scale_state_features(self, state_features):
         state_features = np.copy(state_features)
 
-        if not isinstance(self.agent, TrueOnlineSarsaLambdaAgent):      # TODO check is for old agent only
-            state_features[1] /= self.simulator.max_abs_transaction_amount
-            state_features[6] /= self.simulator.max_abs_transaction_amount
+        state_features[1] /= self.simulator.max_abs_transaction_amount
+        state_features[6] /= self.simulator.max_abs_transaction_amount
 
-            state_features[3] /= self.simulator.max_num_trans_single_card
-            state_features[4] /= self.simulator.max_num_trans_single_card
-            state_features[5] /= self.simulator.max_num_trans_single_card
+        state_features[3] /= self.simulator.max_num_trans_single_card
+        state_features[4] /= self.simulator.max_num_trans_single_card
+        state_features[5] /= self.simulator.max_num_trans_single_card
 
-            state_features[2] /= self.simulator.max_num_timesteps_between_trans
+        state_features[2] /= self.simulator.max_num_timesteps_between_trans
 
         return state_features
 
@@ -209,12 +189,6 @@ class RLAuthenticator(AbstractAuthenticator):
         :param transaction:
         :return:
         """
-        if isinstance(self.agent, TrueOnlineSarsaLambdaAgent):
-            # TODO this is the old agent with bad theoretical foundations, remove it
-            using_old_agent = True
-        else:
-            using_old_agent = False
-
         transaction_df = pd.DataFrame([transaction])
         df_with_features = self.state_creator.feature_processing_func(transaction_df)
         transaction_row = df_with_features.iloc[0]
@@ -237,19 +211,11 @@ class RLAuthenticator(AbstractAuthenticator):
         self.avg_reward_per_trans[transaction.CardID] = \
             ((curr_avg_card_reward * num_card_trans) + reward) / num_card_trans
 
-        if using_old_agent:
-            time_since_last_transaction = state_features[2]
-            if time_since_last_transaction > 0:
-                # divide reward by time since last transaction, because rewards in episodes with infrequent rewards are
-                # less important than rewards in episodes with frequent rewards
-                reward /= time_since_last_transaction
-
-        if not using_old_agent and transaction.Global_Date == self.agent.get_last_date(transaction.CardID):
+        if transaction.Global_Date == self.agent.get_last_date(transaction.CardID):
 
             # in this case we can simply modify the most recently registered reward, we didn't learn from it yet
             self.agent.reset_fraud_reward(card_id=transaction.CardID, reward=-state_features[1])
-
-        elif not using_old_agent:
+        else:
             self.agent.fake_learn(
                 state_features=scaled_state_features,
                 action=0,
@@ -270,13 +236,6 @@ class RLAuthenticator(AbstractAuthenticator):
                 card_id=transaction.CardID,
                 t=self.simulator.schedule.time,
                 reward=0.0
-            )
-        else:
-            self.agent.learn(
-                state_features=scaled_state_features,
-                action=0,
-                reward=reward,
-                card_id=transaction.CardID
             )
 
 

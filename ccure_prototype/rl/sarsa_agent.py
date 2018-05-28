@@ -16,20 +16,15 @@ class CustomerData:
     Class for objects containing customer-specific data that we need for our Concurrent RL
     """
 
-    def __init__(self, dim, global_theta, t, state_action_features, transaction_date):
-        self.V = np.eye(dim)
-        self.theta = np.copy(global_theta)
-        self.theta_old = np.copy(global_theta)
-        self.e = np.zeros(dim)
+    def __init__(self, t, state_action_features, transaction_date):
         self.tau = t
         self.tau_old = 0
-        self.H = np.zeros((dim, dim))
         self.R_sum = 0.0
         self.phi = np.copy(state_action_features)
         self.last_transaction_date = transaction_date
 
 
-class ConcurrentTrueOnlineSarsaLambdaAgent:
+class SarsaAgent:
 
     def __init__(self, num_real_actions, num_actions, num_state_features,
                  gamma=0.999, base_alpha=0.05, lambda_=0.8):
@@ -38,7 +33,6 @@ class ConcurrentTrueOnlineSarsaLambdaAgent:
         self.num_actions = num_actions
         self.gamma = gamma
         self.alpha = base_alpha / self.dim
-        self.lambda_ = lambda_
 
         self.theta = np.zeros(self.dim)   # TODO different initialization
         self.customer_data_map = {}     # for every customer, an object with customer-specific data such as traces
@@ -82,20 +76,12 @@ class ConcurrentTrueOnlineSarsaLambdaAgent:
                     else:
                         self.genuine_q_values_auth.append(q)
 
-            #ic(best_actions)
-
             idx = int(np.random.random_sample() * len(best_actions))
-
-            #ic(idx)
-            #ic(best_q)
-
             action = best_actions[idx]
 
         if card_id not in self.customer_data_map:
             # first action for this customer, initialize customer
             self.customer_data_map[card_id] = CustomerData(
-                dim=self.dim,
-                global_theta=self.theta,
                 t=t,
                 state_action_features=self.state_action_feature_vector(state_features, action),
                 transaction_date=transaction_date
@@ -133,34 +119,12 @@ class ConcurrentTrueOnlineSarsaLambdaAgent:
             # expect 0 future reward
             phi_prime = np.zeros(self.dim)
 
-        psi = self.theta - customer_data.theta
         phi = customer_data.phi
 
         delta = customer_data.R_sum + self.gamma**(t + 1 - customer_data.tau) * np.dot(self.theta, phi_prime) \
-                - np.dot(customer_data.theta_old + psi, phi)
+                - np.dot(self.theta, phi)
 
-        alpha_phi_phi = self.alpha * np.outer(phi, phi)
-        gamma_tau_tau_old = self.gamma**(customer_data.tau - customer_data.tau_old)
-        dot_e_phi = np.dot(customer_data.e, phi)
-
-        customer_data.V = np.matmul((np.eye(self.dim) - alpha_phi_phi), customer_data.V)
-
-        customer_data.H = customer_data.H - np.matmul(alpha_phi_phi, customer_data.H) \
-                          + gamma_tau_tau_old * np.outer(customer_data.e, phi) \
-                          - gamma_tau_tau_old * dot_e_phi * alpha_phi_phi
-
-        customer_data.e = self.lambda_ * gamma_tau_tau_old * customer_data.e \
-                          + self.alpha * phi \
-                          - self.alpha * self.lambda_ * gamma_tau_tau_old * dot_e_phi * phi
-
-        theta_new = customer_data.theta + delta * customer_data.e \
-                    + self.alpha * np.dot(customer_data.theta_old + psi - customer_data.theta, phi) * phi \
-                    + np.matmul(customer_data.V + (1.0 - self.lambda_) * customer_data.H, psi) \
-                    + np.dot(psi, phi) * (customer_data.e - self.alpha * phi)
-
-        customer_data.theta_old = np.copy(self.theta)
-        self.theta = theta_new
-        customer_data.theta = np.copy(self.theta)
+        self.theta = self.theta + self.alpha * delta * phi
 
         customer_data.phi = phi_prime
         customer_data.R_sum = 0.0

@@ -16,10 +16,12 @@ config_to_plot = 0
 seeds_to_plot = [
     #1406165082,
     357552348,
+    #1268290515,
 ]
 
 #RL_agent_to_plot = "TrueOnlineSarsaLambda"
 RL_agent_to_plot = "ConcurrentTrueOnlineSarsaLambda"
+#RL_agent_to_plot = "Sarsa"
 
 # filenames (without .csv extension) for which we want to create subplots
 files_to_plot = [

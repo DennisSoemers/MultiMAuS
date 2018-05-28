@@ -28,7 +28,7 @@ from ccure_prototype.gui.control_frame import create_control_frame, is_control_f
 from ccure_prototype.rl_authenticator import RLAuthenticator
 from ccure_prototype.rl_authenticator import StateCreator
 from ccure_prototype.rl.concurrent_true_online_sarsa_lambda_agent import ConcurrentTrueOnlineSarsaLambdaAgent
-from ccure_prototype.rl.true_online_sarsa_lambda_agent import TrueOnlineSarsaLambdaAgent
+from ccure_prototype.rl.sarsa_agent import SarsaAgent
 from data.features.aggregate_features import AggregateFeatures
 from data.features.apate_graph_features import ApateGraphFeatures
 from simulator import parameters
@@ -92,7 +92,7 @@ if __name__ == '__main__':
     # if True, we'll share trained R models among all seeds with otherwise the same config
     USE_SEED_AGNOSTIC_MODELS = True
 
-    RL_AGENT = "TrueOnlineSarsaLambda"
+    RL_AGENT = "Sarsa"
     #RL_AGENT = "ConcurrentTrueOnlineSarsaLambda"
 
     # if True, we'll also profile our running code
@@ -648,9 +648,9 @@ if __name__ == '__main__':
                                                  feature_processing_func=process_data,
                                                  num_models=num_r_predictions)
 
-                    if RL_AGENT == "TrueOnlineSarsaLambda":
-                        rl_agent = TrueOnlineSarsaLambdaAgent(
-                            num_actions=2,
+                    if RL_AGENT == "Sarsa":
+                        rl_agent = SarsaAgent(
+                            num_real_actions=2, num_actions=3,
                             num_state_features=state_creator.get_num_state_features()
                         )
                     elif RL_AGENT == "ConcurrentTrueOnlineSarsaLambda":
