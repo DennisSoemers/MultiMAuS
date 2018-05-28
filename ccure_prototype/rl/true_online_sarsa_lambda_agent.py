@@ -66,7 +66,7 @@ class TrueOnlineSarsaLambdaAgent:
         self.alpha = base_alpha / (num_actions * num_state_features)    # TODO decaying learning rate schedule
         self._lambda = _lambda
 
-        self.weights = np.ones(num_actions * num_state_features)   # TODO different initialization
+        self.weights = np.zeros(num_actions * num_state_features)   # TODO different initialization
         self.z_map = {}     # for every customer a separate vector of dutch traces in this dictionary
         self.z_bounds_map = {}      # for every z vector, store a vector with most recently-used normalization bounds
 
@@ -115,6 +115,9 @@ class TrueOnlineSarsaLambdaAgent:
 
             idx = int(np.random.random_sample() * len(best_actions))
             return best_actions[idx]
+
+    def get_weights(self):
+        return self.weights
 
     def learn(self, state_features, action, reward, card_id):
         """

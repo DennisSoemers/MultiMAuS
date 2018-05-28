@@ -80,7 +80,7 @@ if __name__ == '__main__':
 
     # number of steps to simulate for evaluation
     #NUM_SIM_STEPS_EVALUATION = 30_000
-    NUM_SIM_STEPS_EVALUATION = 600
+    NUM_SIM_STEPS_EVALUATION = 800
     #NUM_SIM_STEPS_EVALUATION = 200
     #NUM_SIM_STEPS_EVALUATION = 0
 
@@ -92,8 +92,8 @@ if __name__ == '__main__':
     # if True, we'll share trained R models among all seeds with otherwise the same config
     USE_SEED_AGNOSTIC_MODELS = True
 
-    #RL_AGENT = "TrueOnlineSarsaLambda"
-    RL_AGENT = "ConcurrentTrueOnlineSarsaLambda"
+    RL_AGENT = "TrueOnlineSarsaLambda"
+    #RL_AGENT = "ConcurrentTrueOnlineSarsaLambda"
 
     # if True, we'll also profile our running code
     PROFILE = False
@@ -111,8 +111,8 @@ if __name__ == '__main__':
     simulator_params['end_date'] = datetime(9999, 12, 31)
     simulator_params['stay_prob'][0] = 0.9      # stay probability for genuine customers
     simulator_params['stay_prob'][1] = 0.99     # stay probability for fraudsters
-    #simulator_params['seed'] = random.randrange(2**31)      # only 2^31 instead of 2^32 because R cant handle big seeds
-    simulator_params['seed'] = 1224966315
+    simulator_params['seed'] = random.randrange(2**31)      # only 2^31 instead of 2^32 because R cant handle big seeds
+    #simulator_params['seed'] = 1224966315
     seed = simulator_params['seed']
     print(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), ": Running C-Cure prototype with seed = ", seed)
 
@@ -582,6 +582,7 @@ if __name__ == '__main__':
                             print("")
 
                     preds[np.isnan(preds)] = 0
+
                     return preds
 
                 # get rid of all fraudsters in training data and replace them with new fraudsters
@@ -768,6 +769,13 @@ if __name__ == '__main__':
                             summary.fraud_population[-1] = len(simulator.fraudsters)
 
                             summary.total_fraud_amounts_seen[-1] = authenticator_test_phase.total_fraud_amounts_seen
+
+                            curr_rl_weights = rl_agent.get_weights()
+                            for action in range(summary.num_actions):
+                                for w_idx in range(summary.num_weights_per_action):
+                                    summary.weights_per_action[action][w_idx][-1] = \
+                                        curr_rl_weights[w_idx + action * summary.num_weights_per_action]
+
                             for m in cs_model_config_names:
                                 model_summ = authenticator_test_phase.cs_model_performance_summaries[m]
                                 summary.num_true_positives_per_model[m][-1] = model_summ.num_true_positives

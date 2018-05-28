@@ -14,12 +14,12 @@ config_to_plot = 0
 
 # list of all the seeds for which we wish to plot results. empty list = all seeds
 seeds_to_plot = [
-    #2110830925,
-    1224966315,
+    #1406165082,
+    357552348,
 ]
 
-RL_agent_to_plot = "TrueOnlineSarsaLambda"
-#RL_agent_to_plot = "ConcurrentTrueOnlineSarsaLambda"
+#RL_agent_to_plot = "TrueOnlineSarsaLambda"
+RL_agent_to_plot = "ConcurrentTrueOnlineSarsaLambda"
 
 # filenames (without .csv extension) for which we want to create subplots
 files_to_plot = [
@@ -50,6 +50,10 @@ files_to_plot_per_model = [
     'num_agreements_true_negative',
     'num_agreements_false_negative',
 ]
+
+plot_q_values = True
+
+plot_rl_weights = True
 
 
 def create_subfigure(fig, filename, num_cols, num_rows, subfigure_idx, run_dirs):
@@ -190,4 +194,49 @@ if __name__ == '__main__':
         subfigure_idx += 1
 
     plt.legend(loc=2, fontsize=15, frameon=True).draggable()
+
+    # -----------------------------------------------------------------------------------------------------------
+
+    if plot_q_values:
+        total_num_subplots = 4
+        num_subfigure_cols = 2
+        num_subfigure_rows = 2
+
+        fig = plt.figure(figsize=(18, 9))
+        fig.suptitle("C-Cure Prototype Results - {} - Q-Values".format(RL_agent_to_plot))
+
+        create_subfigure(fig=fig, filename='q_values_genuine_no_auth', num_cols=num_subfigure_cols,
+                         num_rows=num_subfigure_rows, subfigure_idx=1, run_dirs=run_dirs)
+
+        create_subfigure(fig=fig, filename='q_values_genuine_auth', num_cols=num_subfigure_cols,
+                         num_rows=num_subfigure_rows, subfigure_idx=2, run_dirs=run_dirs)
+
+        create_subfigure(fig=fig, filename='q_values_fraud_no_auth', num_cols=num_subfigure_cols,
+                         num_rows=num_subfigure_rows, subfigure_idx=3, run_dirs=run_dirs)
+
+        create_subfigure(fig=fig, filename='q_values_fraud_auth', num_cols=num_subfigure_cols,
+                         num_rows=num_subfigure_rows, subfigure_idx=4, run_dirs=run_dirs)
+
+    # -----------------------------------------------------------------------------------------------------------
+
+    if plot_rl_weights:
+        if RL_agent_to_plot == "TrueOnlineSarsaLambda":
+            num_actions = 2
+        else:
+            num_actions = 3
+
+        num_weights = 11
+
+        subfigure_idx = 1
+
+        fig = plt.figure(figsize=(18, 9))
+        #fig.suptitle("C-Cure Prototype Results - {} - RL Weights".format(RL_agent_to_plot))
+
+        for action in range(num_actions):
+            for weight in range(num_weights):
+                create_subfigure(fig=fig, filename="action_{}_weight_{}".format(action, weight), num_cols=num_weights,
+                                 num_rows=num_actions, subfigure_idx=subfigure_idx, run_dirs=run_dirs)
+                subfigure_idx += 1
+
+    plt.tight_layout()
     plt.show()

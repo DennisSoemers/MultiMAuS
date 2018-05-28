@@ -7,6 +7,10 @@ for experiments
 
 import os
 
+from ccure_prototype.rl.true_online_sarsa_lambda_agent import TrueOnlineSarsaLambdaAgent
+
+from icecream import ic
+
 
 class ExperimentSummary:
 
@@ -28,6 +32,21 @@ class ExperimentSummary:
         self.fraud_population = [0, ]
 
         self.total_fraud_amounts_seen = [0.0, ]
+
+        if isinstance(rl_agent, TrueOnlineSarsaLambdaAgent):
+            self.num_actions = 2
+        else:
+            self.num_actions = 3
+
+        current_rl_weights = rl_agent.get_weights()
+        self.num_weights_per_action = int(current_rl_weights.shape[0] / self.num_actions)
+
+        self.weights_per_action = []
+        for action in range(self.num_actions):
+            self.weights_per_action.append([])
+
+            for i in range(self.num_weights_per_action):
+                self.weights_per_action[action].append([current_rl_weights[i + action * self.num_weights_per_action]])
 
         self.num_true_positives_per_model = {model_name: [0, ] for model_name in cs_model_config_names}
         self.num_false_positives_per_model = {model_name: [0, ] for model_name in cs_model_config_names}
@@ -60,6 +79,14 @@ class ExperimentSummary:
         self.genuine_q_values_auth_filepath = os.path.join(output_dir, "q_values_genuine_auth.csv")
         self.fraud_q_values_no_auth_filepath = os.path.join(output_dir, "q_values_fraud_no_auth.csv")
         self.fraud_q_values_auth_filepath = os.path.join(output_dir, "q_values_fraud_auth.csv")
+
+        self.weight_filepaths_per_action = []
+        for action in range(self.num_actions):
+            self.weight_filepaths_per_action.append([])
+
+            for i in range(self.num_weights_per_action):
+                self.weight_filepaths_per_action[action].append(
+                    os.path.join(output_dir, "action_{}_weight_{}.csv".format(action, i)))
 
         self.num_true_positives_per_model_filepaths = {
             model_name: os.path.join(output_dir, "num_true_positives_{}.csv".format(
@@ -124,6 +151,13 @@ class ExperimentSummary:
 
         self.total_fraud_amounts_seen_file = open(self.total_fraud_amounts_seen_filepath, 'x')
 
+        self.weight_files_per_action = []
+        for action in range(self.num_actions):
+            self.weight_files_per_action.append([])
+
+            for i in range(self.num_weights_per_action):
+                self.weight_files_per_action[action].append(open(self.weight_filepaths_per_action[action][i], 'x'))
+
         self.num_true_positives_per_model_files = \
             {model_name: open(self.num_true_positives_per_model_filepaths[model_name], 'x')
              for model_name in self.cs_model_config_names}
@@ -174,6 +208,10 @@ class ExperimentSummary:
         self.fraud_population_file.close()
 
         self.total_fraud_amounts_seen_file.close()
+
+        for action in range(self.num_actions):
+            for i in range(self.num_weights_per_action):
+                self.weight_files_per_action[action][i].close()
 
         for model_name in self.cs_model_config_names:
             self.num_true_positives_per_model_files[model_name].close()
@@ -236,6 +274,10 @@ class ExperimentSummary:
 
         self.total_fraud_amounts_seen.append(self.total_fraud_amounts_seen[-1])
 
+        for action in range(self.num_actions):
+            for i in range(self.num_weights_per_action):
+                self.weights_per_action[action][i].append(self.weights_per_action[action][i][-1])
+
         for model_name in self.cs_model_config_names:
             self.num_true_positives_per_model[model_name].append(self.num_true_positives_per_model[model_name][-1])
             self.num_false_positives_per_model[model_name].append(self.num_false_positives_per_model[model_name][-1])
@@ -293,6 +335,11 @@ class ExperimentSummary:
         self.total_fraud_amounts_seen_file.writelines("{}, {}\n".format(
             self.timesteps[i + 1], self.total_fraud_amounts_seen[i + 1]) for i in range(len(self.total_fraud_amounts_seen) - 1))
 
+        for action in range(self.num_actions):
+            for w in range(self.num_weights_per_action):
+                self.weight_files_per_action[action][w].writelines("{}, {}\n".format(
+                    self.timesteps[i + 1], self.weights_per_action[action][w][i + 1]) for i in range(len(self.weights_per_action[action][w]) - 1))
+
         for model_name in self.cs_model_config_names:
             self.num_true_positives_per_model_files[model_name].writelines("{}, {}\n".format(
                 self.timesteps[i + 1], self.num_true_positives_per_model[model_name][i + 1]) for i in range(
@@ -340,6 +387,10 @@ class ExperimentSummary:
         self.fraud_population = [self.fraud_population[-1], ]
 
         self.total_fraud_amounts_seen = [self.total_fraud_amounts_seen[-1], ]
+
+        for action in range(self.num_actions):
+            for w in range(self.num_weights_per_action):
+                self.weights_per_action[action][w] = [self.weights_per_action[action][w][-1], ]
 
         for model_name in self.cs_model_config_names:
             self.num_true_positives_per_model[model_name] = [self.num_true_positives_per_model[model_name][-1], ]

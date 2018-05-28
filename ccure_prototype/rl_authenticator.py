@@ -37,6 +37,7 @@ class RLAuthenticator(AbstractAuthenticator):
         self.relative_fee = relative_fee
 
         self.secondary_auths_per_card = defaultdict(int)
+        self.rejected_secondary_auths_per_card = defaultdict(int)
         self.num_unauthenticated_transactions_in_a_row_per_card = defaultdict(int)
         self.successful_trans_per_card = defaultdict(int)
         self.avg_reward_per_trans = defaultdict(float)
@@ -58,6 +59,7 @@ class RLAuthenticator(AbstractAuthenticator):
         state_features = self.state_creator.compute_state_vector_from_raw(
             customer,
             self.secondary_auths_per_card[customer.card_id],
+            self.rejected_secondary_auths_per_card[customer.card_id],
             self.num_unauthenticated_transactions_in_a_row_per_card[customer.card_id],
             self.avg_reward_per_trans[customer.card_id]
         )
@@ -92,6 +94,7 @@ class RLAuthenticator(AbstractAuthenticator):
                 # customer refused to authenticate --> reward = 0
                 reward = 0
                 success = False
+                self.rejected_secondary_auths_per_card[customer.card_id] += 1
 
                 if customer.fraudster:
                     self.num_secondary_auths_blocked_frauds += 1
@@ -179,10 +182,11 @@ class RLAuthenticator(AbstractAuthenticator):
 
         if not isinstance(self.agent, TrueOnlineSarsaLambdaAgent):      # TODO check is for old agent only
             state_features[1] /= self.simulator.max_abs_transaction_amount
-            state_features[5] /= self.simulator.max_abs_transaction_amount
+            state_features[6] /= self.simulator.max_abs_transaction_amount
 
             state_features[3] /= self.simulator.max_num_trans_single_card
             state_features[4] /= self.simulator.max_num_trans_single_card
+            state_features[5] /= self.simulator.max_num_trans_single_card
 
             state_features[2] /= self.simulator.max_num_timesteps_between_trans
 
@@ -217,6 +221,7 @@ class RLAuthenticator(AbstractAuthenticator):
         state_features = self.state_creator.compute_state_vector_from_features(
             transaction_row,
             self.secondary_auths_per_card[transaction.CardID],
+            self.rejected_secondary_auths_per_card[transaction.CardID],
             self.num_unauthenticated_transactions_in_a_row_per_card[transaction.CardID],
             self.avg_reward_per_trans[transaction.CardID]
         )
@@ -281,11 +286,15 @@ class StateCreator:
         self.make_predictions_func = make_predictions_func
         self.feature_processing_func = feature_processing_func
 
-        self.num_state_features = 6 + num_models
+        self.num_state_features = 7 + num_models
 
     def compute_state_vector_from_raw(
             self, customer,
-            num_secondary_auths_card_id, num_unauthenticated_transactions_card_id, avg_reward_per_trans):
+            num_secondary_auths_card_id,
+            num_rejected_secondary_auths_card_id,
+            num_unauthenticated_transactions_card_id,
+            avg_reward_per_trans
+    ):
         """
         Uses the given customer's current properties to create a feature vector.
 
@@ -335,6 +344,7 @@ class StateCreator:
         return self.compute_state_vector_from_features(
             transaction_row,
             num_secondary_auths_card_id,
+            num_rejected_secondary_auths_card_id,
             num_unauthenticated_transactions_card_id,
             avg_reward_per_trans
         )
@@ -342,6 +352,7 @@ class StateCreator:
     def compute_state_vector_from_features(
             self, feature_vector,
             num_secondary_auths_card_id,
+            num_rejected_secondary_auths_card_id,
             num_unauthenticated_transactions_card_id,
             avg_reward_per_trans
     ):
@@ -350,12 +361,13 @@ class StateCreator:
         """
         state_features = []
 
-        state_features.append(1.0)  # intercept
-        state_features.append(feature_vector.Amount)
-        state_features.append(feature_vector.TimeSinceLastTransaction)
-        state_features.append(num_secondary_auths_card_id)
-        state_features.append(num_unauthenticated_transactions_card_id)
-        state_features.append(avg_reward_per_trans)
+        state_features.append(1.0)  # intercept                                     0
+        state_features.append(feature_vector.Amount)                            #   1
+        state_features.append(feature_vector.TimeSinceLastTransaction)          #   2
+        state_features.append(num_secondary_auths_card_id)                      #   3
+        state_features.append(num_rejected_secondary_auths_card_id)             #   4
+        state_features.append(num_unauthenticated_transactions_card_id)         #   5
+        state_features.append(avg_reward_per_trans)                             #   6
 
         predictions = self.make_predictions_func(feature_vector.values)
         #print(predictions)
@@ -380,6 +392,7 @@ class StateCreator:
         state_features.append(0.0)  # Amount
         state_features.append(time_since_last_transaction)
         state_features.append(authenticator.secondary_auths_per_card[card_id])
+        state_features.append(authenticator.rejected_secondary_auths_per_card[card_id])
         state_features.append(authenticator.num_unauthenticated_transactions_in_a_row_per_card[card_id])
         state_features.append(authenticator.avg_reward_per_trans[card_id])
 
