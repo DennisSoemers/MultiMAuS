@@ -80,7 +80,7 @@ if __name__ == '__main__':
 
     # number of steps to simulate for evaluation
     #NUM_SIM_STEPS_EVALUATION = 30_000
-    NUM_SIM_STEPS_EVALUATION = 800
+    NUM_SIM_STEPS_EVALUATION = 4000
     #NUM_SIM_STEPS_EVALUATION = 200
     #NUM_SIM_STEPS_EVALUATION = 0
 
@@ -681,6 +681,7 @@ if __name__ == '__main__':
                                            relative_fee=RELATIVE_FEE,
                                            output_dir=OUTPUT_DIR,
                                            cs_model_config_names=cs_model_config_names,
+                                           rl_authenticator=authenticator_test_phase,
                                            rl_agent=rl_agent) as summary:
 
                         t = 0

@@ -14,12 +14,10 @@ config_to_plot = 0
 
 # list of all the seeds for which we wish to plot results. empty list = all seeds
 seeds_to_plot = [
-    #1406165082,
-    357552348,
-    #1268290515,
+    178216022,
+    #1940194933,
 ]
 
-#RL_agent_to_plot = "TrueOnlineSarsaLambda"
 RL_agent_to_plot = "ConcurrentTrueOnlineSarsaLambda"
 #RL_agent_to_plot = "Sarsa"
 
@@ -56,6 +54,8 @@ files_to_plot_per_model = [
 plot_q_values = True
 
 plot_rl_weights = True
+
+plot_secondary_auth_percentages = True
 
 
 def create_subfigure(fig, filename, num_cols, num_rows, subfigure_idx, run_dirs):
@@ -239,6 +239,44 @@ if __name__ == '__main__':
                 create_subfigure(fig=fig, filename="action_{}_weight_{}".format(action, weight), num_cols=num_weights,
                                  num_rows=num_actions, subfigure_idx=subfigure_idx, run_dirs=run_dirs)
                 subfigure_idx += 1
+
+    # -----------------------------------------------------------------------------------------------------------
+
+    if plot_secondary_auth_percentages:
+        fig = plt.figure(figsize=(18, 9))
+        fig.suptitle("C-Cure Prototype Results - {} - Percentage Secondary Authentications per Transaction Counter".format(RL_agent_to_plot))
+
+        transaction_counters = []
+        file_occurences = []
+        sum_results = []
+
+        for run_dir in run_dirs:
+            with open(os.path.join(run_dir, "secondary_auth_percentages.csv")) as file:
+                lines = file.readlines()
+
+                for line in lines:
+                    transaction_counter, ratio = line.rstrip('\n').split(", ")
+                    transaction_counter = int(transaction_counter)
+                    percentage = float(ratio) * 100.0
+
+                    while transaction_counter >= len(transaction_counters):
+                        transaction_counters.append(0)
+                        file_occurences.append(0)
+                        sum_results.append(0.0)
+
+                    transaction_counters[transaction_counter] = transaction_counter
+                    file_occurences[transaction_counter] += 1
+                    sum_results[transaction_counter] += percentage
+
+        # get rid of the 0 index, there is no such thing as a 0th transaction, first is 1st
+        transaction_counters = transaction_counters[1:]
+        file_occurences = file_occurences[1:]
+        sum_results = sum_results[1:]
+
+        mean_results = [sum_results[i] / file_occurences[i] for i in range(len(sum_results))]
+
+        plt.bar(transaction_counters, mean_results)
+        plt.grid(color='k', linestyle='dotted')
 
     plt.tight_layout()
     plt.show()

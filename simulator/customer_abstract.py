@@ -2,6 +2,8 @@ from mesa import Agent
 from abc import ABCMeta, abstractmethod
 import numpy as np
 
+from ccure_prototype.rl_authenticator import RLAuthenticator
+
 
 class AbstractCustomer(Agent,  metaclass=ABCMeta):
     def __init__(self, unique_id, transaction_model, fraudster):
@@ -107,6 +109,25 @@ class AbstractCustomer(Agent,  metaclass=ABCMeta):
             # update time since last transaction
             if self.time_since_last_transaction != 0:
                 self.time_since_last_transaction += 1
+
+        if not self.active:
+            if self.time_since_last_transaction % 72 == 0:  # NOTE: if changing the 72, also change it in transaction_model
+                if isinstance(self.model.authenticator, RLAuthenticator):
+                    if self.model.authenticator.agent.is_card_id_known(self.card_id):
+                        # only need to run this learning step if it's a customer we actually know in the RL part
+                        # (which is not the case for those who decided to leave already during training/gap data)
+                        self.model.authenticator.agent.fake_learn(
+                            state_features=self.model.authenticator.scale_state_features(
+                                self.model.authenticator.state_creator.compute_inactive_state(
+                                    self.card_id,
+                                    self.time_since_last_transaction,
+                                    self.model.authenticator
+                                )),
+                            action=2,
+                            card_id=self.card_id,
+                            t=self.model.schedule.time,
+                            reward=0.0
+                        )
 
         if not self.stay:
             self.model.pending_leave(self)

@@ -138,10 +138,8 @@ class TransactionModel(Model):
             if c.time_since_last_transaction != 0 and c.time_since_last_transaction < 672:
                 remaining_pending_leavers.append(c)
 
-                if c.time_since_last_transaction % 24 == 0:
-                    if isinstance(self.authenticator, RLAuthenticator) \
-                            and isinstance(self.authenticator.agent, ConcurrentTrueOnlineSarsaLambdaAgent):
-
+                if c.time_since_last_transaction % 72 == 0:     # NOTE: if changing the 72, also change it in customer_abstract
+                    if isinstance(self.authenticator, RLAuthenticator):
                         if self.authenticator.agent.is_card_id_known(c.card_id):
                             # only need to run this learning step if it's a customer we actually know in the RL part
                             # (which is not the case for those who decided to leave already during training/gap data)

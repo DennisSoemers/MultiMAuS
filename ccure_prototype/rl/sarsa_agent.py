@@ -27,7 +27,7 @@ class CustomerData:
 class SarsaAgent:
 
     def __init__(self, num_real_actions, num_actions, num_state_features,
-                 gamma=0.999, base_alpha=0.05, lambda_=0.8):
+                 gamma=0.999, base_alpha=0.025, lambda_=0.8):
         self.dim = num_state_features * num_actions
         self.num_real_actions = num_real_actions
         self.num_actions = num_actions

@@ -41,6 +41,10 @@ class RLAuthenticator(AbstractAuthenticator):
         self.successful_trans_per_card = defaultdict(int)
         self.avg_reward_per_trans = defaultdict(float)
 
+        self.num_trans_attempts_per_card = defaultdict(int)
+        self.trans_count_bins = [0, ]
+        self.second_auth_count_bins = [0, ]
+
         self.num_secondary_auths = 0
         self.num_secondary_auths_blocked_frauds = 0
         self.num_secondary_auths_blocked_genuines = 0
@@ -73,6 +77,15 @@ class RLAuthenticator(AbstractAuthenticator):
             fraud=customer.fraudster
         )
 
+        self.num_trans_attempts_per_card[customer.card_id] += 1
+
+        # unless there's a bug, this "while" should really be equivalent to an if
+        while self.num_trans_attempts_per_card[customer.card_id] >= len(self.trans_count_bins):
+            self.trans_count_bins.append(0)
+            self.second_auth_count_bins.append(0)
+
+        self.trans_count_bins[self.num_trans_attempts_per_card[customer.card_id]] += 1
+
         success = True
 
         if action == 1:
@@ -82,6 +95,8 @@ class RLAuthenticator(AbstractAuthenticator):
 
             self.secondary_auths_per_card[customer.card_id] += 1
             self.num_unauthenticated_transactions_in_a_row_per_card[customer.card_id] = 0
+
+            self.second_auth_count_bins[self.num_trans_attempts_per_card[customer.card_id]] += 1
 
             if authentication is None:
                 # customer refused to authenticate --> reward = 0

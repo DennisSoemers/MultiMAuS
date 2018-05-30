@@ -12,7 +12,9 @@ from icecream import ic
 
 class ExperimentSummary:
 
-    def __init__(self, flat_fee, relative_fee, output_dir, cs_model_config_names, rl_agent, write_frequency=200):
+    def __init__(self, flat_fee, relative_fee, output_dir, cs_model_config_names,
+                 rl_authenticator, rl_agent, write_frequency=200):
+
         self.cs_model_config_names = cs_model_config_names
 
         self.timesteps = [0, ]
@@ -75,6 +77,8 @@ class ExperimentSummary:
         self.fraud_q_values_no_auth_filepath = os.path.join(output_dir, "q_values_fraud_no_auth.csv")
         self.fraud_q_values_auth_filepath = os.path.join(output_dir, "q_values_fraud_auth.csv")
 
+        self.secondary_auth_percentages_filepath = os.path.join(output_dir, "secondary_auth_percentages.csv")
+
         self.weight_filepaths_per_action = []
         for action in range(self.num_actions):
             self.weight_filepaths_per_action.append([])
@@ -124,6 +128,7 @@ class ExperimentSummary:
                 model_name.replace(":", "_").replace("/", "_")))
             for model_name in cs_model_config_names}
 
+        self.rl_authenticator = rl_authenticator
         self.rl_agent = rl_agent
 
         self.flat_fee = flat_fee
@@ -245,6 +250,14 @@ class ExperimentSummary:
                     i, self.rl_agent.fraud_q_values_auth[i]) for i in range(
                     len(self.rl_agent.fraud_q_values_auth)
                 ))
+
+        # write percentage of secondary authentications among the i'th transactions for every customer
+        if self.rl_authenticator is not None:
+            with open(self.secondary_auth_percentages_filepath, 'x') as file:
+                file.writelines("{}, {}\n".format(
+                    i, self.rl_authenticator.second_auth_count_bins[i] / self.rl_authenticator.trans_count_bins[i])
+                                for i in range(1, len(self.rl_authenticator.second_auth_count_bins))
+                )
 
         return exc_val is None
 
