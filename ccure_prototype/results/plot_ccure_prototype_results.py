@@ -5,7 +5,9 @@ Plots a bunch of results for C-Cure prototype runs
 """
 
 import matplotlib.pyplot as plt
+import numpy as np
 import os
+import pandas as pd
 import seaborn as sns
 from math import ceil
 
@@ -14,7 +16,17 @@ config_to_plot = 0
 
 # list of all the seeds for which we wish to plot results. empty list = all seeds
 seeds_to_plot = [
-    178216022,
+    #1923542738,
+    #2059921134,
+    #1730383209,
+    #15876390,
+    #1398548544,
+    #1484293880,
+    #1631605134,
+    #88742031,
+    #384378282,
+    #981629647,
+    #178216022,
     #1940194933,
 ]
 
@@ -37,6 +49,13 @@ files_to_plot = [
     'total_fraud_amounts_seen',
 ]
 
+# tuples of filenames (without .csv extensions) for which we want to create percentage-plots where one file is
+# "divided" by another file. Third element of tuple is title for subfigure
+percentage_files_to_plot = [
+    ('num_secondary_auths_genuine', 'num_genuines', 'Percentage Secondary Authentications Among Genuine Transactions'),
+    ('num_secondary_auths_fraudulent', 'num_frauds', 'Percentage Secondary Authentications Among Fraudulent Transactions'),
+]
+
 # filenames (without .csv extension) for which we want to create subplots containing all models
 files_to_plot_per_model = [
     'num_true_positives',
@@ -56,6 +75,19 @@ plot_q_values = True
 plot_rl_weights = True
 
 plot_secondary_auth_percentages = True
+
+plot_per_model_bins = True
+
+bin_percentage_files_to_plot_per_model = [
+    ('perc_true_positive_bins', 'True Positives'),
+    ('perc_false_positive_bins', 'False Positives'),
+    ('perc_true_negative_bins', 'True Negatives'),
+    ('perc_false_positive_bins', 'False Negatives'),
+    ('perc_agreements_true_positive_bins', 'True Positive Agreements'),
+    ('perc_agreements_false_positive_bins', 'False Positive Agreements'),
+    ('perc_agreements_true_negative_bins', 'True Negative Agreements'),
+    ('perc_agreements_false_negative_bins', 'False Negative Agreements')
+]
 
 
 def create_subfigure(fig, filename, num_cols, num_rows, subfigure_idx, run_dirs):
@@ -94,6 +126,74 @@ def create_subfigure(fig, filename, num_cols, num_rows, subfigure_idx, run_dirs)
     ax.grid(color='k', linestyle='dotted')
 
 
+def create_percentage_subfigure(fig, filename_1, filename_2, title, num_cols, num_rows, subfigure_idx, run_dirs):
+    timesteps = []
+    sum_results_1 = []
+
+    for run_dir in run_dirs:
+        with open(os.path.join(run_dir, "{}.csv".format(filename_1))) as results_file:
+            lines = results_file.readlines()
+
+            if len(lines) < len(timesteps):
+                # don't have as many results in this file as in some other, so need to discard some at the end
+                timesteps = timesteps[:len(lines)]
+                sum_results_1 = sum_results_1[:len(lines)]
+
+            if 0 < len(timesteps) < len(lines):
+                # have more results in this new file than in some other file, so discard some of these new results
+                lines = lines[:len(timesteps)]
+
+            for line in lines:
+                t, result = line.rstrip('\n').split(", ")
+                t = int(t)
+                result = float(result)
+
+                if t == len(timesteps):
+                    timesteps.append(t)
+                    sum_results_1.append(result)
+                else:
+                    sum_results_1[t] += result
+
+    mean_results_1 = np.asarray([s / len(run_dirs) for s in sum_results_1])
+
+    sum_results_2 = [0] * len(timesteps)
+
+    for run_dir in run_dirs:
+        with open(os.path.join(run_dir, "{}.csv".format(filename_2))) as results_file:
+            lines = results_file.readlines()
+
+            if len(lines) < len(timesteps):
+                # don't have as many results in this file as in some other, so need to discard some at the end
+                timesteps = timesteps[:len(lines)]
+                sum_results_2 = sum_results_2[:len(lines)]
+
+            if 0 < len(timesteps) < len(lines):
+                # have more results in this new file than in some other file, so discard some of these new results
+                lines = lines[:len(timesteps)]
+
+            for line in lines:
+                t, result = line.rstrip('\n').split(", ")
+                t = int(t)
+                result = float(result)
+
+                if t == len(timesteps):
+                    timesteps.append(t)
+                    sum_results_2.append(result)
+                else:
+                    sum_results_2[t] += result
+
+    mean_results_2 = np.asarray([s / len(run_dirs) for s in sum_results_2])
+
+    # don't want to divide by 0:
+    mean_results_2[mean_results_2 == 0] = 1
+
+    ax = fig.add_subplot(num_rows, num_cols, subfigure_idx)
+    ax.set_title(title)
+    ax.plot(timesteps, mean_results_1 / mean_results_2)
+    ax.grid(color='k', linestyle='dotted')
+    ax.set_ylim([0.0, 1.0])
+
+
 def create_per_model_subfigure(fig, filename, num_cols, num_rows, subfigure_idx, run_dirs):
     timesteps = []
     sum_results_per_model = {}
@@ -103,7 +203,7 @@ def create_per_model_subfigure(fig, filename, num_cols, num_rows, subfigure_idx,
         per_model_files = [run_file for run_file in run_files if run_file.startswith(filename)]
 
         for per_model_file in per_model_files:
-            model_name = per_model_file[len(filename)+1:-len(".csv")]        # TODO probably +2 instead of +1?
+            model_name = per_model_file[len(filename)+1:-len(".csv")]
 
             if model_name not in sum_results_per_model:
                 sum_results_per_model[model_name] = []
@@ -181,6 +281,23 @@ if __name__ == '__main__':
 
     # -----------------------------------------------------------------------------------------------------------
 
+    total_num_subplots = len(percentage_files_to_plot)
+    num_subfigure_cols = min(4, total_num_subplots)
+    num_subfigure_rows = ceil(total_num_subplots / num_subfigure_cols)
+
+    fig = plt.figure(figsize=(18, 9))
+    fig.suptitle("C-Cure Prototype Results - Sec. Auth. Percentages - {}".format(RL_agent_to_plot))
+
+    subfigure_idx = 1
+
+    for (filename_1, filename_2, title) in percentage_files_to_plot:
+        create_percentage_subfigure(fig=fig, filename_1=filename_1, filename_2=filename_2, title=title,
+                                    num_cols=num_subfigure_cols, num_rows=num_subfigure_rows,
+                                    subfigure_idx=subfigure_idx, run_dirs=run_dirs)
+        subfigure_idx += 1
+
+    # -----------------------------------------------------------------------------------------------------------
+
     total_num_subplots = len(files_to_plot_per_model)
     num_subfigure_cols = min(4, total_num_subplots)
     num_subfigure_rows = ceil(total_num_subplots / num_subfigure_cols)
@@ -240,6 +357,8 @@ if __name__ == '__main__':
                                  num_rows=num_actions, subfigure_idx=subfigure_idx, run_dirs=run_dirs)
                 subfigure_idx += 1
 
+    plt.tight_layout()
+
     # -----------------------------------------------------------------------------------------------------------
 
     if plot_secondary_auth_percentages:
@@ -247,7 +366,7 @@ if __name__ == '__main__':
         fig.suptitle("C-Cure Prototype Results - {} - Percentage Secondary Authentications per Transaction Counter".format(RL_agent_to_plot))
 
         transaction_counters = []
-        file_occurences = []
+        file_occurrences = []
         sum_results = []
 
         for run_dir in run_dirs:
@@ -261,22 +380,119 @@ if __name__ == '__main__':
 
                     while transaction_counter >= len(transaction_counters):
                         transaction_counters.append(0)
-                        file_occurences.append(0)
+                        file_occurrences.append(0)
                         sum_results.append(0.0)
 
                     transaction_counters[transaction_counter] = transaction_counter
-                    file_occurences[transaction_counter] += 1
+                    file_occurrences[transaction_counter] += 1
                     sum_results[transaction_counter] += percentage
 
         # get rid of the 0 index, there is no such thing as a 0th transaction, first is 1st
         transaction_counters = transaction_counters[1:]
-        file_occurences = file_occurences[1:]
+        file_occurrences = file_occurrences[1:]
         sum_results = sum_results[1:]
 
-        mean_results = [sum_results[i] / file_occurences[i] for i in range(len(sum_results))]
+        mean_results = [sum_results[i] / file_occurrences[i] for i in range(len(sum_results))]
 
         plt.bar(transaction_counters, mean_results)
         plt.grid(color='k', linestyle='dotted')
 
-    plt.tight_layout()
+    # -----------------------------------------------------------------------------------------------------------
+
+    if plot_per_model_bins:
+        total_num_subplots = len(bin_percentage_files_to_plot_per_model)
+        num_subfigure_cols = min(4, total_num_subplots)
+        num_subfigure_rows = ceil(total_num_subplots / num_subfigure_cols)
+
+        fig = plt.figure(figsize=(18, 9))
+        fig.suptitle("C-Cure Prototype Results - {} - Model Performance per Transaction Counter".format(RL_agent_to_plot))
+
+        subfigure_idx = 1
+
+        for (filename, title) in bin_percentage_files_to_plot_per_model:
+            transaction_counters = []
+            file_occurrences_per_model = {}
+            sum_results_per_model = {}
+
+            for run_dir in run_dirs:
+                run_files = os.listdir(run_dir)
+                per_model_files = [run_file for run_file in run_files if run_file.startswith(filename)]
+
+                for per_model_file in per_model_files:
+                    model_name = per_model_file[len(filename) + 1:-len(".csv")]
+
+                    if model_name not in sum_results_per_model:
+                        file_occurrences_per_model[model_name] = [0] * len(transaction_counters)
+                        sum_results_per_model[model_name] = [0] * len(transaction_counters)
+
+                    sum_results = sum_results_per_model[model_name]
+
+                    with open(os.path.join(run_dir, per_model_file)) as results_file:
+                        lines = results_file.readlines()
+
+                        for line in lines:
+                            transaction_counter, ratio = line.rstrip('\n').split(", ")
+                            transaction_counter = int(transaction_counter)
+                            percentage = float(ratio) * 100.0
+
+                            while transaction_counter >= len(transaction_counters):
+                                transaction_counters.append(0)
+
+                                for name in sum_results_per_model:
+                                    file_occurrences_per_model[name].append(0)
+                                    sum_results_per_model[name].append(0.0)
+
+                            transaction_counters[transaction_counter] = transaction_counter
+                            file_occurrences_per_model[model_name][transaction_counter] += 1
+                            sum_results_per_model[model_name][transaction_counter] += percentage
+
+            # get rid of the 0 index, there is no such thing as a 0th transaction, first is 1st
+            transaction_counters = transaction_counters[1:]
+
+            for model_name in sum_results_per_model:
+                file_occurrences_per_model[model_name] = file_occurrences_per_model[model_name][1:]
+                sum_results_per_model[model_name] = sum_results_per_model[model_name][1:]
+
+            mean_results_per_model = {
+                model_name: [sum_results_per_model[model_name][i] / file_occurrences_per_model[model_name][i]
+                             for i in range(len(sum_results_per_model[model_name]))]
+                for model_name in sum_results_per_model
+            }
+
+            model_names = [model_name for model_name in sum_results_per_model]
+            total_bars_occupied_width = 0.9
+            width_per_bar = total_bars_occupied_width / len(model_names)
+
+            ax = fig.add_subplot(num_subfigure_rows, num_subfigure_cols, subfigure_idx)
+            ax.set_title(title)
+
+            xs = np.asarray(transaction_counters)
+            ys = []
+
+            for model_name in model_names:
+                mean_results = [
+                    sum_results_per_model[model_name][i] / file_occurrences_per_model[model_name][i]
+                    for i in range(len(sum_results_per_model[model_name]))
+                ]
+
+                ys.append(mean_results)
+
+            if len(model_names) % 2 == 0:
+                # even number of models
+                bar_offsets = [width_per_bar * (i - 0.5 * len(model_names)) for i in range(len(model_names))]
+                align = 'edge'
+            else:
+                # odd number of models
+                bar_offsets = [width_per_bar * (i - 0.5 * (len(model_names) - 1)) for i in range(len(model_names))]
+                align = 'center'
+
+            for i in range(len(model_names)):
+                ax.bar(xs + bar_offsets[i], ys[i], label=model_names[i], align=align, width=width_per_bar)
+
+            ax.grid(color='k', linestyle='dotted')
+
+            subfigure_idx += 1
+
+        plt.legend(loc=2, fontsize=15, frameon=True).draggable()
+
     plt.show()

@@ -46,9 +46,21 @@ class SarsaAgent:
         self.fraud_q_values_no_auth = list()
         self.fraud_q_values_auth = list()
 
+        self.first_action_time = None
+
+        self.fixed_actions_map = {}
+
     def choose_action_eps_greedy(self, state_features, card_id, t, transaction_date, fraud, epsilon=0.1):
+        if self.first_action_time is None:
+            self.first_action_time = t  # need to account for high starting time due to generation of training data etc.
+
+        epsilon = max(epsilon, (600.0 - (t - self.first_action_time)) / 600.0)
+
         if np.random.random_sample() < epsilon:
             action = int(np.random.random_sample() * self.num_real_actions)
+
+            # TODO get rid of this if it doesn't work well
+            self.fixed_actions_map[card_id] = action
         else:
             best_q = -1_000_000.0
             best_actions = []
@@ -78,6 +90,10 @@ class SarsaAgent:
 
             idx = int(np.random.random_sample() * len(best_actions))
             action = best_actions[idx]
+
+        # TODO probably remove this again?
+        if card_id in self.fixed_actions_map:
+            action = self.fixed_actions_map[card_id]
 
         if card_id not in self.customer_data_map:
             # first action for this customer, initialize customer

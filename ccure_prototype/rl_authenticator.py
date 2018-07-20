@@ -26,10 +26,22 @@ class CSModelPerformanceSummary:
         self.num_agreements_true_negative = 0
         self.num_agreements_false_negative = 0
 
+        self.num_true_positive_bins = [0, ]
+        self.num_false_positive_bins = [0, ]
+        self.num_true_negative_bins = [0, ]
+        self.num_false_negative_bins = [0, ]
+        self.num_agreements_bins = [0, ]
+        self.num_agreements_true_positive_bins = [0, ]
+        self.num_agreements_false_positive_bins = [0, ]
+        self.num_agreements_true_negative_bins = [0, ]
+        self.num_agreements_false_negative_bins = [0, ]
+
 
 class RLAuthenticator(AbstractAuthenticator):
 
     def __init__(self, agent, state_creator, flat_fee, relative_fee, cs_model_config_names, simulator):
+        super().__init__()
+
         self.agent = agent
         self.state_creator = state_creator
         self.flat_fee = flat_fee
@@ -78,13 +90,16 @@ class RLAuthenticator(AbstractAuthenticator):
         )
 
         self.num_trans_attempts_per_card[customer.card_id] += 1
+        num_trans_attempts = self.num_trans_attempts_per_card[customer.card_id]
 
-        # unless there's a bug, this "while" should really be equivalent to an if
-        while self.num_trans_attempts_per_card[customer.card_id] >= len(self.trans_count_bins):
+        # unless there's a bug, the following "while" should really be equivalent to an if
+        assert num_trans_attempts <= len(self.trans_count_bins)
+
+        while num_trans_attempts >= len(self.trans_count_bins):
             self.trans_count_bins.append(0)
             self.second_auth_count_bins.append(0)
 
-        self.trans_count_bins[self.num_trans_attempts_per_card[customer.card_id]] += 1
+        self.trans_count_bins[num_trans_attempts] += 1
 
         success = True
 
@@ -96,7 +111,7 @@ class RLAuthenticator(AbstractAuthenticator):
             self.secondary_auths_per_card[customer.card_id] += 1
             self.num_unauthenticated_transactions_in_a_row_per_card[customer.card_id] = 0
 
-            self.second_auth_count_bins[self.num_trans_attempts_per_card[customer.card_id]] += 1
+            self.second_auth_count_bins[num_trans_attempts] += 1
 
             if authentication is None:
                 # customer refused to authenticate --> reward = 0
@@ -130,7 +145,7 @@ class RLAuthenticator(AbstractAuthenticator):
         self.agent.register_reward(reward, customer.card_id)
 
         # some book-keeping
-        cs_model_preds = state_features[4:]
+        cs_model_preds = state_features[7:]
 
         if customer.fraudster:
             self.total_fraud_amounts_seen += state_features[1]
@@ -138,19 +153,31 @@ class RLAuthenticator(AbstractAuthenticator):
             for i in range(len(self.cs_model_config_names)):
                 summ = self.cs_model_performance_summaries[self.cs_model_config_names[i]]
 
+                assert cs_model_preds[i] == 0 or cs_model_preds[i] == 1
+
                 if cs_model_preds[i] == 0:
                     summ.num_false_negatives += 1
+
+                    self.increment_summ_bin(bin_idx=num_trans_attempts, list_of_bins=summ.num_false_negative_bins)
 
                     if action == 0:
                         summ.num_agreements += 1
                         summ.num_agreements_false_negative += 1
+
+                        self.increment_summ_bin(bin_idx=num_trans_attempts, list_of_bins=summ.num_agreements_bins)
+                        self.increment_summ_bin(bin_idx=num_trans_attempts, list_of_bins=summ.num_agreements_false_negative_bins)
                 else:
                     summ.num_true_positives += 1
                     summ.total_fraud_amounts_detected += state_features[1]
 
+                    self.increment_summ_bin(bin_idx=num_trans_attempts, list_of_bins=summ.num_true_positive_bins)
+
                     if action == 1:
                         summ.num_agreements += 1
                         summ.num_agreements_true_positive += 1
+
+                        self.increment_summ_bin(bin_idx=num_trans_attempts, list_of_bins=summ.num_agreements_bins)
+                        self.increment_summ_bin(bin_idx=num_trans_attempts, list_of_bins=summ.num_agreements_true_positive_bins)
         else:
             for i in range(len(self.cs_model_config_names)):
                 summ = self.cs_model_performance_summaries[self.cs_model_config_names[i]]
@@ -158,20 +185,36 @@ class RLAuthenticator(AbstractAuthenticator):
                 if cs_model_preds[i] == 0:
                     summ.num_true_negatives += 1
 
+                    self.increment_summ_bin(bin_idx=num_trans_attempts, list_of_bins=summ.num_true_negative_bins)
+
                     if action == 0:
                         summ.num_agreements += 1
                         summ.num_agreements_true_negative += 1
+
+                        self.increment_summ_bin(bin_idx=num_trans_attempts, list_of_bins=summ.num_agreements_bins)
+                        self.increment_summ_bin(bin_idx=num_trans_attempts, list_of_bins=summ.num_agreements_true_negative_bins)
                 else:
                     summ.num_false_positives += 1
+
+                    self.increment_summ_bin(bin_idx=num_trans_attempts, list_of_bins=summ.num_false_positive_bins)
 
                     if action == 1:
                         summ.num_agreements += 1
                         summ.num_agreements_false_positive += 1
 
+                        self.increment_summ_bin(bin_idx=num_trans_attempts, list_of_bins=summ.num_agreements_bins)
+                        self.increment_summ_bin(bin_idx=num_trans_attempts, list_of_bins=summ.num_agreements_false_positive_bins)
+
         return success
 
     def compute_fees(self, amount):
         return self.flat_fee + self.relative_fee * amount
+
+    def increment_summ_bin(self, bin_idx, list_of_bins):
+        while bin_idx >= len(list_of_bins):
+            list_of_bins.append(0)
+
+        list_of_bins[bin_idx] += 1
 
     def scale_state_features(self, state_features):
         state_features = np.copy(state_features)

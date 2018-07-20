@@ -10,7 +10,7 @@ Many other people also contributed to the project from
 Vrije Universiteit Brussel (AI Lab and BUTO) and Université Catholique de Louvain (Crypto Group)
 """
 
-import atexit
+import argparse
 import random
 import json
 import logging
@@ -41,15 +41,52 @@ if __name__ == '__main__':
 
     logger = multiprocessing.log_to_stderr(logging.INFO)
 
+    parser = argparse.ArgumentParser(description='C-Cure Prototype')
+    parser.add_argument('--num-sim-steps-training-data', dest='num_sim_steps_training_data', type=int, default=6000,
+                        help='Number of simulation steps to run when generating training data.')
+    parser.add_argument('--train-feature-engineering-ratio', dest='train_feature_engineering_ratio', type=float,
+                        default=0.125,
+                        help='Ratio of training data that should be used to train feature engineering (remainder is'
+                             ' used to train model).')
+    parser.add_argument('--num-sim-steps-skip', dest='num_sim_steps_skip', type=int, default=1000,
+                        help='Number of simulation steps to run to generate skip/gap data (in between training'
+                             ' and test data).')
+    parser.add_argument('--num-sim-steps-evaluation', dest='num_sim_steps_evaluation', type=int, default=10_000,
+                        help='Number of simulation steps to run to generate data for evaluation (test data).')
 
-    @atexit.register
-    def notify():
-        """
-        Make some noise when we crash / terminate (ONLY WORKS ON WINDOWS)
-        """
-        import winsound
-        winsound.Beep(440, 500)
+    parser.add_argument('--flat-fee', dest='flat_fee', type=float, default=0.01,
+                        help='Flat fee we take for every successful transaction.')
+    parser.add_argument('--relative-fee', dest='relative_fee', type=float, default=0.01,
+                        help='Relative fee we take for every successful transaction'
+                             ' (multiplied by transaction amount).')
 
+    parser.add_argument('--use-seed-specific-models', dest='use_seed_specific_models', action='store_true',
+                        help='Train separate offline models for every random seed (otherwise, we share trained'
+                             ' models across different runs with different random seeds).')
+
+    parser.add_argument('--rl-agent', dest='rl_agent', choices=['Sarsa', 'ConcurrentTrueOnlineSarsaLambda'],
+                        default='ConcurrentTrueOnlineSarsaLambda',
+                        help='RL Agent to use during evaluation phase.')
+
+    parser.add_argument('--cs-models-r-filepath', dest='cs_models_r_filepath',
+                        default='D:/Apps/C-Cure/Code/R/CSModels.R',
+                        help='Filepath to R script for Cost-Sensitive models.')
+
+    parser.add_argument('--seed', dest='seed', type=int, default=None,
+                        help='Seed for RNG. By default, will randomly generate one through RNG based on default seed.')
+
+    parser.add_argument('--run-idx', dest='run_idx', type=int, default=None,
+                        help='Unique index for run. By default, will try to automatically find the next index'
+                             ' based on which directories for results already exist. The default behaviour may go'
+                             ' wrong in cases where we start many different runs in parallel.')
+
+    parser.add_argument('--out-dir', dest='out_dir', default=os.path.join(os.path.dirname(__file__), 'results'),
+                        help='Base directory for results output.')
+
+    parser.add_argument('--disable-ui', dest='disable_ui', action='store_true',
+                        help='Disable the UI (control panel).')
+
+    parsed_args = parser.parse_args()
 
     '''
     --------------------------------------------------------------------------------------
@@ -68,32 +105,25 @@ if __name__ == '__main__':
     # experiment setup
     # -------------------------------------------
     # number of steps to simulate to generate training data
-    #NUM_SIM_STEPS_TRAINING_DATA = 20_000
-    NUM_SIM_STEPS_TRAINING_DATA = 4000
+    NUM_SIM_STEPS_TRAINING_DATA = parsed_args.num_sim_steps_training_data
     # ratio out of training data to use for feature engineering (necessary to learn how to create APATE graph features)
-    TRAIN_FEATURE_ENGINEERING_RATIO = 0.125
+    TRAIN_FEATURE_ENGINEERING_RATIO = parsed_args.train_feature_engineering_ratio
 
     # number of steps to simulate and discard afterwards to create gap between training and test data
-    #NUM_SIM_STEPS_SKIP = 5_000
-    NUM_SIM_STEPS_SKIP = 1000
-    #NUM_SIM_STEPS_SKIP = 0
+    NUM_SIM_STEPS_SKIP = parsed_args.num_sim_steps_skip
 
     # number of steps to simulate for evaluation
-    #NUM_SIM_STEPS_EVALUATION = 30_000
-    NUM_SIM_STEPS_EVALUATION = 4000
-    #NUM_SIM_STEPS_EVALUATION = 200
-    #NUM_SIM_STEPS_EVALUATION = 0
+    NUM_SIM_STEPS_EVALUATION = parsed_args.num_sim_steps_evaluation
 
     # flat fee we take for every genuine transaction
-    FLAT_FEE = 0.01
+    FLAT_FEE = parsed_args.flat_fee
     # relative fee (multiplied by transaction amount) we take for every genuine transaction
-    RELATIVE_FEE = 0.01
+    RELATIVE_FEE = parsed_args.relative_fee
 
     # if True, we'll share trained R models among all seeds with otherwise the same config
-    USE_SEED_AGNOSTIC_MODELS = True
+    USE_SEED_AGNOSTIC_MODELS = not parsed_args.use_seed_specific_models
 
-    RL_AGENT = "Sarsa"
-    #RL_AGENT = "ConcurrentTrueOnlineSarsaLambda"
+    RL_AGENT = parsed_args.rl_agent
 
     # if True, we'll also profile our running code
     PROFILE = False
@@ -101,8 +131,8 @@ if __name__ == '__main__':
     # -------------------------------------------
     # R offline models
     # -------------------------------------------
-    # filepath for offline models R script. NOTE: hardcoded
-    CS_MODELS_R_FILEPATH = "D:/Apps/C-Cure/Code/R/CSModels.R"
+    # filepath for offline models R script.
+    CS_MODELS_R_FILEPATH = parsed_args.cs_models_r_filepath
 
     # -------------------------------------------
     # simulator parameters
@@ -111,10 +141,19 @@ if __name__ == '__main__':
     simulator_params['end_date'] = datetime(9999, 12, 31)
     simulator_params['stay_prob'][0] = 0.9      # stay probability for genuine customers
     simulator_params['stay_prob'][1] = 0.99     # stay probability for fraudsters
-    simulator_params['seed'] = random.randrange(2**31)      # only 2^31 instead of 2^32 because R cant handle big seeds
-    #simulator_params['seed'] = 1224966315
+
+    if parsed_args.seed is None:
+        simulator_params['seed'] = random.randrange(2**31)  # only 2^31 instead of 2^32 because R cant handle big seeds
+    else:
+        simulator_params['seed'] = parsed_args.seed
+
     seed = simulator_params['seed']
     print(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), ": Running C-Cure prototype with seed = ", seed)
+
+    import rpy2
+    print("rpy2 version: {}".format(rpy2.__version__))
+    from rpy2.rinterface import R_VERSION_BUILD
+    print("R_VERSION_BUILD: {}".format(R_VERSION_BUILD))
 
     simulator_params['num_fraudsters'] = 300
     simulator_params['stay_prob'][0] = 0.9      # genuine
@@ -129,7 +168,7 @@ if __name__ == '__main__':
     # -------------------------------------------
     # output
     # -------------------------------------------
-    OUTPUT_DIR = os.path.join(os.path.dirname(__file__), 'results')
+    OUTPUT_DIR = parsed_args.out_dir
 
     experiment_config = simulator_params.copy()
     experiment_config.pop('seed')
@@ -164,7 +203,11 @@ if __name__ == '__main__':
 
     OUTPUT_DIR = os.path.join(OUTPUT_DIR, RL_AGENT)
 
-    results_run_idx = 0
+    if parsed_args.run_idx is None:
+        results_run_idx = 0
+    else:
+        results_run_idx = parsed_args.run_idx
+
     while True:
         if os.path.isdir(os.path.join(OUTPUT_DIR, "run{0:05d}".format(results_run_idx))):
             results_run_idx += 1
@@ -173,6 +216,7 @@ if __name__ == '__main__':
 
     OUTPUT_DIR = os.path.join(OUTPUT_DIR, "run{0:05d}".format(results_run_idx))
     os.makedirs(OUTPUT_DIR)
+    print("Output dir = {}".format(OUTPUT_DIR))
 
     OUTPUT_FILE_FEATURE_LEARNING_DATA = os.path.join(OUTPUT_DIR, 'feature_learning_data.csv')
     OUTPUT_FILE_MODEL_LEARNING_DATA = os.path.join(OUTPUT_DIR, 'model_learning_data.csv')
@@ -388,36 +432,41 @@ if __name__ == '__main__':
     simulator.customer_leave_callbacks.append(on_customer_leave)
 
     # GUI
-    control_frame = create_control_frame()
+    if not parsed_args.disable_ui:
+        control_frame = create_control_frame()
+        timestep_speed_measure_time_start = time.time()
+        start_time_generate_training_data = timestep_speed_measure_time_start
+        timestep_speed = 0
+
     exit_simulation = False
-    timestep_speed_measure_time_start = time.time()
-    start_time_generate_training_data = timestep_speed_measure_time_start
-    timestep_speed = 0
 
     # generate training data
+    print("Generating training data...")
     for t in range(NUM_SIM_STEPS_TRAINING_DATA):
-        if t % CONTROL_UI_UPDATE_FREQUENCY == 0:
-            if not is_control_frame_alive():
-                exit_simulation = True
-                break
+        if not parsed_args.disable_ui:
+            if t % CONTROL_UI_UPDATE_FREQUENCY == 0:
+                if not is_control_frame_alive():
+                    exit_simulation = True
+                    break
 
-            control_frame.update_info_generate_training_data(t, NUM_SIM_STEPS_TRAINING_DATA, timestep_speed)
-            control_frame.root.update()
+                control_frame.update_info_generate_training_data(t, NUM_SIM_STEPS_TRAINING_DATA, timestep_speed)
+                control_frame.root.update()
 
-            if control_frame.want_quit:
-                exit_simulation = True
-                break
-            if control_frame.want_pause:
-                time.sleep(1)
-                continue
+                if control_frame.want_quit:
+                    exit_simulation = True
+                    break
+                if control_frame.want_pause:
+                    time.sleep(1)
+                    continue
 
         # This line is the only code we actually want to execute in the loop, the simulator step
         simulator.step()
 
-        if t % UPDATE_SPEED_FREQUENCY == 0:
-            curr_time = time.time()
-            timestep_speed = UPDATE_SPEED_FREQUENCY / (curr_time - timestep_speed_measure_time_start)
-            timestep_speed_measure_time_start = curr_time
+        if not parsed_args.disable_ui:
+            if t % UPDATE_SPEED_FREQUENCY == 0:
+                curr_time = time.time()
+                timestep_speed = UPDATE_SPEED_FREQUENCY / (curr_time - timestep_speed_measure_time_start)
+                timestep_speed_measure_time_start = curr_time
 
     if not exit_simulation:
         training_data = get_log(clear_after=True)
@@ -428,16 +477,20 @@ if __name__ == '__main__':
               num_training_instances, " training instances (",
               num_feature_learning_instances, " for feature learning, ",
               num_model_learning_instances, " for model learning)")
-        control_frame.update_info_generate_training_data(NUM_SIM_STEPS_TRAINING_DATA, NUM_SIM_STEPS_TRAINING_DATA,
-                                                         timestep_speed,
-                                                         total_time=time.time() - start_time_generate_training_data)
-        control_frame.root.update()
+
+        if not parsed_args.disable_ui:
+            control_frame.update_info_generate_training_data(NUM_SIM_STEPS_TRAINING_DATA, NUM_SIM_STEPS_TRAINING_DATA,
+                                                             timestep_speed,
+                                                             total_time=time.time() - start_time_generate_training_data)
+            control_frame.root.update()
 
         feature_learning_data = training_data.iloc[:num_feature_learning_instances]
         model_learning_data = training_data.iloc[num_feature_learning_instances:]
 
         need_train_models = not os.path.isdir(os.path.join(OUTPUT_DIR_SHARED_RUNS, "Models"))
+
         # feature engineering
+        print("Feature engineering...")
 
         # define feature engineering function that we can run in a different thread without blocking this one
         def feature_engineering_func(feature_learning_data, model_learning_data, out_list, need_train_models):
@@ -468,16 +521,17 @@ if __name__ == '__main__':
         feature_eng_thread.start()
 
         while feature_eng_thread.is_alive():
-            if not is_control_frame_alive():
-                exit_simulation = True
-                break
+            if not parsed_args.disable_ui:
+                if not is_control_frame_alive():
+                    exit_simulation = True
+                    break
 
-            control_frame.update_info_feature_engineering(time.time() - start_time_feature_engineering, finished=False)
-            control_frame.root.update()
+                control_frame.update_info_feature_engineering(time.time() - start_time_feature_engineering, finished=False)
+                control_frame.root.update()
 
-            if control_frame.want_quit:
-                exit_simulation = True
-                break
+                if control_frame.want_quit:
+                    exit_simulation = True
+                    break
 
             # sleep for a bit while we let feature eng. thread do its work
             time.sleep(1)
@@ -491,12 +545,16 @@ if __name__ == '__main__':
             model_learning_data.to_csv(OUTPUT_FILE_MODEL_LEARNING_DATA, index_label=False)
 
             feature_eng_thread = None   # this may help clean up?
-            control_frame.update_info_feature_engineering(time.time() - start_time_feature_engineering, finished=True)
-            control_frame.root.update()
+
+            if not parsed_args.disable_ui:
+                control_frame.update_info_feature_engineering(time.time() - start_time_feature_engineering, finished=True)
+                control_frame.root.update()
 
             # train offline models in R if our Models directory does not already exist
             start_time_r_model_training = time.time()
             if need_train_models:
+                print("Training R models...")
+
                 # create new process
                 from ccure_prototype import r_model_training
                 train_r_process = multiprocessing.Process(target=r_model_training.train_r_models,
@@ -509,9 +567,10 @@ if __name__ == '__main__':
                 train_r_process.start()
 
                 while train_r_process.is_alive():
-                    if not is_control_frame_alive():
-                        exit_simulation = True
-                        break
+                    if not parsed_args.disable_ui:
+                        if not is_control_frame_alive():
+                            exit_simulation = True
+                            break
 
                     # figure out for how many models we already have files
                     trial_models_dir = os.path.join(OUTPUT_DIR_SHARED_RUNS, "TrialModels")
@@ -522,40 +581,50 @@ if __name__ == '__main__':
                     else:
                         num_models_trained = len(os.listdir(trial_models_dir)) + len(os.listdir(final_models_dir))
 
-                    control_frame.update_info_r_model_training(
-                        num_models_trained,
-                        NUM_R_MODELS, time.time() - start_time_r_model_training)
-                    control_frame.root.update()
+                    if not parsed_args.disable_ui:
+                        control_frame.update_info_r_model_training(
+                            num_models_trained,
+                            NUM_R_MODELS, time.time() - start_time_r_model_training)
+                        control_frame.root.update()
 
-                    if control_frame.want_quit:
-                        exit_simulation = True
-                        break
+                        if control_frame.want_quit:
+                            exit_simulation = True
+                            break
 
                     # sleep for a bit while we let model training thread do its work
                     time.sleep(1)
 
             if not exit_simulation:
+                print("Using R models from directory: {}".format(OUTPUT_DIR_SHARED_RUNS))
+
                 trial_models_dir = os.path.join(OUTPUT_DIR_SHARED_RUNS, "TrialModels")
                 final_models_dir = os.path.join(OUTPUT_DIR_SHARED_RUNS, "Models")
 
-                control_frame.update_info_r_model_training(
-                    len(os.listdir(trial_models_dir)) + len(os.listdir(final_models_dir)),
-                    NUM_R_MODELS, time.time() - start_time_r_model_training)
-                control_frame.root.update()
+                if not parsed_args.disable_ui:
+                    control_frame.update_info_r_model_training(
+                        len(os.listdir(trial_models_dir)) + len(os.listdir(final_models_dir)),
+                        NUM_R_MODELS, time.time() - start_time_r_model_training)
+                    control_frame.root.update()
 
                 # load R models into memory
+                print("importing rpy2.rinterface...")
                 import rpy2.rinterface as ri
+                print("calling initr()...")
                 ri.initr()
                 r_set_seed = ri.baseenv['set.seed']
+                print("calling R set_seed()")
                 r_set_seed(seed)
+                print("parsing R commands...")
                 ri.parse('library(compiler)')
                 ri.parse('enableJIT(3)')
                 r_source = ri.baseenv['source']
+                print("calling source({})...".format(CS_MODELS_R_FILEPATH))
                 r_source(ri.StrSexpVector((CS_MODELS_R_FILEPATH, )))
                 savepath_string = OUTPUT_DIR_SHARED_RUNS.replace("\\", "/")
                 if not savepath_string.endswith("/"):
                     savepath_string += "/"
                 r_loadCSModels = ri.globalenv['loadCSModels']
+                print("loading CS models...")
                 num_r_predictions = int(r_loadCSModels(ri.StrSexpVector((savepath_string, )))[0])
                 r_getModelConfigNames = ri.globalenv['getModelConfigNames']
                 cs_model_config_names = r_getModelConfigNames()
@@ -568,6 +637,7 @@ if __name__ == '__main__':
                     #print("feature_vector = ", feature_vector)
                     preds = np.asarray(r_predictCSModels(ri.FloatSexpVector(feature_vector)))
 
+                    '''
                     if random.random() < 0.01:
                         # in about 1% of the predictions, also run a slow prediction and make sure it's equal to the
                         # optimized version
@@ -580,12 +650,14 @@ if __name__ == '__main__':
                             print("Fast predictions: ", preds)
                             print("Feature vector: ", feature_vector)
                             print("")
+                    '''
 
                     preds[np.isnan(preds)] = 0
 
                     return preds
 
                 # get rid of all fraudsters in training data and replace them with new fraudsters
+                print("replacing known fraudsters...")
                 fraudster_ids = set()
                 for transaction in training_data.itertuples():  # this loops through feature and model learning data at once
                     if transaction.Target == 1:
@@ -595,31 +667,34 @@ if __name__ == '__main__':
                 fraudster_ids = None    # clean memory
 
                 # generate some data as a gap between training and test data
+                print("Generating gap data...")
                 start_time_generate_gap_data = time.time()
 
                 for t in range(NUM_SIM_STEPS_SKIP):
-                    if t % CONTROL_UI_UPDATE_FREQUENCY == 0:
-                        if not is_control_frame_alive():
-                            exit_simulation = True
-                            break
+                    if not parsed_args.disable_ui:
+                        if t % CONTROL_UI_UPDATE_FREQUENCY == 0:
+                            if not is_control_frame_alive():
+                                exit_simulation = True
+                                break
 
-                        control_frame.update_info_generate_gap_data(t, NUM_SIM_STEPS_SKIP, timestep_speed)
-                        control_frame.root.update()
+                            control_frame.update_info_generate_gap_data(t, NUM_SIM_STEPS_SKIP, timestep_speed)
+                            control_frame.root.update()
 
-                        if control_frame.want_quit:
-                            exit_simulation = True
-                            break
-                        if control_frame.want_pause:
-                            time.sleep(1)
-                            continue
+                            if control_frame.want_quit:
+                                exit_simulation = True
+                                break
+                            if control_frame.want_pause:
+                                time.sleep(1)
+                                continue
 
                     # This line is the only code we actually want to execute in the loop, the simulator step
                     simulator.step()
 
-                    if t % UPDATE_SPEED_FREQUENCY == 0:
-                        curr_time = time.time()
-                        timestep_speed = UPDATE_SPEED_FREQUENCY / (curr_time - timestep_speed_measure_time_start)
-                        timestep_speed_measure_time_start = curr_time
+                    if not parsed_args.disable_ui:
+                        if t % UPDATE_SPEED_FREQUENCY == 0:
+                            curr_time = time.time()
+                            timestep_speed = UPDATE_SPEED_FREQUENCY / (curr_time - timestep_speed_measure_time_start)
+                            timestep_speed_measure_time_start = curr_time
 
                 if not exit_simulation:
                     skip_data = get_log(clear_after=True)
@@ -627,11 +702,12 @@ if __name__ == '__main__':
                     # can still use the skip data to update our feature engineering
                     update_feature_constructors_unlabeled(skip_data)
 
-                    control_frame.update_info_generate_gap_data(NUM_SIM_STEPS_SKIP,
-                                                                NUM_SIM_STEPS_SKIP,
-                                                                timestep_speed,
-                                                                total_time=time.time() - start_time_generate_gap_data)
-                    control_frame.root.update()
+                    if not parsed_args.disable_ui:
+                        control_frame.update_info_generate_gap_data(NUM_SIM_STEPS_SKIP,
+                                                                    NUM_SIM_STEPS_SKIP,
+                                                                    timestep_speed,
+                                                                    total_time=time.time() - start_time_generate_gap_data)
+                        control_frame.root.update()
 
                     # allow all training and skip data to be cleaned from memory
                     # (may not actually matter since AggregateFeatures keeps them all stored anyway)
@@ -675,6 +751,7 @@ if __name__ == '__main__':
                     # at that time
                     to_report = {}
 
+                    print(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), " (run {}): Starting evaluation...".format(results_run_idx))
                     timestep_speed_measure_time_start = time.time()
 
                     with ExperimentSummary(flat_fee=FLAT_FEE,
@@ -687,26 +764,30 @@ if __name__ == '__main__':
                         t = 0
 
                         while t < NUM_SIM_STEPS_EVALUATION:
-                            if t % CONTROL_UI_UPDATE_FREQUENCY_EVAL == 0:
-                                if not is_control_frame_alive():
-                                    break
+                            if t % 500 == 0:
+                                print(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), " (run {}): t = {}".format(results_run_idx, t))
 
-                                control_frame.update_info_labels_eval(
-                                    t, NUM_SIM_STEPS_EVALUATION, timestep_speed,
-                                    num_transactions=summary.num_transactions[-1],
-                                    num_genuines=summary.num_genuines[-1],
-                                    num_fraudulents=summary.num_frauds[-1],
-                                    num_secondary_auths=summary.num_secondary_auths[-1],
-                                    num_secondary_auths_genuine=summary.num_secondary_auths_genuine[-1],
-                                    num_secondary_auths_fraud=summary.num_secondary_auths_fraudulent[-1])
+                            if not parsed_args.disable_ui:
+                                if t % CONTROL_UI_UPDATE_FREQUENCY_EVAL == 0:
+                                    if not is_control_frame_alive():
+                                        break
 
-                                control_frame.root.update()
+                                    control_frame.update_info_labels_eval(
+                                        t, NUM_SIM_STEPS_EVALUATION, timestep_speed,
+                                        num_transactions=summary.num_transactions[-1],
+                                        num_genuines=summary.num_genuines[-1],
+                                        num_fraudulents=summary.num_frauds[-1],
+                                        num_secondary_auths=summary.num_secondary_auths[-1],
+                                        num_secondary_auths_genuine=summary.num_secondary_auths_genuine[-1],
+                                        num_secondary_auths_fraud=summary.num_secondary_auths_fraudulent[-1])
 
-                                if control_frame.want_quit:
-                                    break
-                                if control_frame.want_pause:
-                                    time.sleep(1)
-                                    continue
+                                    control_frame.root.update()
+
+                                    if control_frame.want_quit:
+                                        break
+                                    if control_frame.want_pause:
+                                        time.sleep(1)
+                                        continue
 
                             # process any transactions that get reported and turn out to be fraudulent at this time
                             if t in to_report:
@@ -795,9 +876,10 @@ if __name__ == '__main__':
                                 summary.num_agreements_false_negative_per_model[m][-1] = \
                                     model_summ.num_agreements_false_negative
 
-                            if t % UPDATE_SPEED_FREQUENCY_EVAL == 0:
-                                curr_time = time.time()
-                                timestep_speed = t / (curr_time - timestep_speed_measure_time_start)
+                            if not parsed_args.disable_ui:
+                                if t % UPDATE_SPEED_FREQUENCY_EVAL == 0:
+                                    curr_time = time.time()
+                                    timestep_speed = t / (curr_time - timestep_speed_measure_time_start)
 
                             t += 1
 

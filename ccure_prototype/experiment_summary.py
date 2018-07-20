@@ -7,8 +7,6 @@ for experiments
 
 import os
 
-from icecream import ic
-
 
 class ExperimentSummary:
 
@@ -56,6 +54,16 @@ class ExperimentSummary:
         self.num_agreements_true_negative_per_model = {model_name: [0, ] for model_name in cs_model_config_names}
         self.num_agreements_false_negative_per_model = {model_name: [0, ] for model_name in cs_model_config_names}
 
+        self.num_true_positive_bins_per_model = {model_name: [[], ] for model_name in cs_model_config_names}
+        self.num_false_positive_bins_per_model = {model_name: [[], ] for model_name in cs_model_config_names}
+        self.num_true_negative_bins_per_model = {model_name: [[], ] for model_name in cs_model_config_names}
+        self.num_false_negative_bins_per_model = {model_name: [[], ] for model_name in cs_model_config_names}
+        self.num_agreements_bins_per_model = {model_name: [[], ] for model_name in cs_model_config_names}
+        self.num_agreements_true_positive_bins_per_model = {model_name: [[], ] for model_name in cs_model_config_names}
+        self.num_agreements_false_positive_bins_per_model = {model_name: [[], ] for model_name in cs_model_config_names}
+        self.num_agreements_true_negative_bins_per_model = {model_name: [[], ] for model_name in cs_model_config_names}
+        self.num_agreements_false_negative_bins_per_model = {model_name: [[], ] for model_name in cs_model_config_names}
+
         self.cumulative_rewards_filepath = os.path.join(output_dir, "cumulative_rewards.csv")
         self.num_transactions_filepath = os.path.join(output_dir, "num_transactions.csv")
         self.num_genuines_filepath = os.path.join(output_dir, "num_genuines.csv")
@@ -78,6 +86,9 @@ class ExperimentSummary:
         self.fraud_q_values_auth_filepath = os.path.join(output_dir, "q_values_fraud_auth.csv")
 
         self.secondary_auth_percentages_filepath = os.path.join(output_dir, "secondary_auth_percentages.csv")
+        self.num_bin_entries_filepath = os.path.join(output_dir, "num_bin_entries.csv")
+
+        self.output_dir = output_dir
 
         self.weight_filepaths_per_action = []
         for action in range(self.num_actions):
@@ -251,13 +262,103 @@ class ExperimentSummary:
                     len(self.rl_agent.fraud_q_values_auth)
                 ))
 
-        # write percentage of secondary authentications among the i'th transactions for every customer
+        # write data for bins of i'th transaction per customer
         if self.rl_authenticator is not None:
             with open(self.secondary_auth_percentages_filepath, 'x') as file:
                 file.writelines("{}, {}\n".format(
                     i, self.rl_authenticator.second_auth_count_bins[i] / self.rl_authenticator.trans_count_bins[i])
                                 for i in range(1, len(self.rl_authenticator.second_auth_count_bins))
                 )
+
+            with open(self.num_bin_entries_filepath, 'x') as file:
+                file.writelines("{}, {}\n".format(
+                    i, self.rl_authenticator.trans_count_bins[i])
+                                for i in range(1, len(self.rl_authenticator.trans_count_bins))
+                )
+
+            # define helper function to get entries for bins (auto return 0 if bin doesn't exist)
+            def get_bin_entry(bin_list, bin_idx):
+                if bin_idx < len(bin_list):
+                    return bin_list[bin_idx]
+                else:
+                    return 0
+
+            trans_count_bins = self.rl_authenticator.trans_count_bins
+
+            for model_name in self.cs_model_config_names:
+                model_summ = self.rl_authenticator.cs_model_performance_summaries[model_name]
+
+                with open(os.path.join(self.output_dir, "perc_true_positive_bins_{}.csv".format(
+                        model_name.replace(":", "_").replace("/", "_"))), 'x') as file:
+
+                    file.writelines("{}, {}\n".format(
+                        i, get_bin_entry(model_summ.num_true_positive_bins, i) / trans_count_bins[i])
+                                    for i in range(1, len(self.rl_authenticator.trans_count_bins))
+                    )
+
+                with open(os.path.join(self.output_dir, "perc_false_positive_bins_{}.csv".format(
+                        model_name.replace(":", "_").replace("/", "_"))), 'x') as file:
+
+                    file.writelines("{}, {}\n".format(
+                        i, get_bin_entry(model_summ.num_false_positive_bins, i) / trans_count_bins[i])
+                                    for i in range(1, len(self.rl_authenticator.trans_count_bins))
+                    )
+
+                with open(os.path.join(self.output_dir, "perc_true_negative_bins_{}.csv".format(
+                        model_name.replace(":", "_").replace("/", "_"))), 'x') as file:
+
+                    file.writelines("{}, {}\n".format(
+                        i, get_bin_entry(model_summ.num_true_negative_bins, i) / trans_count_bins[i])
+                                    for i in range(1, len(self.rl_authenticator.trans_count_bins))
+                    )
+
+                with open(os.path.join(self.output_dir, "perc_false_negative_bins_{}.csv".format(
+                        model_name.replace(":", "_").replace("/", "_"))), 'x') as file:
+
+                    file.writelines("{}, {}\n".format(
+                        i, get_bin_entry(model_summ.num_false_negative_bins, i) / trans_count_bins[i])
+                                    for i in range(1, len(self.rl_authenticator.trans_count_bins))
+                    )
+
+                with open(os.path.join(self.output_dir, "perc_agreements_bins_{}.csv".format(
+                        model_name.replace(":", "_").replace("/", "_"))), 'x') as file:
+
+                    file.writelines("{}, {}\n".format(
+                        i, get_bin_entry(model_summ.num_agreements_bins, i) / trans_count_bins[i])
+                                    for i in range(1, len(self.rl_authenticator.trans_count_bins))
+                    )
+
+                with open(os.path.join(self.output_dir, "perc_agreements_true_positive_bins_{}.csv".format(
+                        model_name.replace(":", "_").replace("/", "_"))), 'x') as file:
+
+                    file.writelines("{}, {}\n".format(
+                        i, get_bin_entry(model_summ.num_agreements_true_positive_bins, i) / trans_count_bins[i])
+                                    for i in range(1, len(self.rl_authenticator.trans_count_bins))
+                    )
+
+                with open(os.path.join(self.output_dir, "perc_agreements_false_positive_bins_{}.csv".format(
+                        model_name.replace(":", "_").replace("/", "_"))), 'x') as file:
+
+                    file.writelines("{}, {}\n".format(
+                        i, get_bin_entry(model_summ.num_agreements_false_positive_bins, i) / trans_count_bins[i])
+                                    for i in range(1, len(self.rl_authenticator.trans_count_bins))
+                    )
+
+                with open(os.path.join(self.output_dir, "perc_agreements_true_negative_bins_{}.csv".format(
+                        model_name.replace(":", "_").replace("/", "_"))), 'x') as file:
+
+                    file.writelines("{}, {}\n".format(
+                        i, get_bin_entry(model_summ.num_agreements_true_negative_bins, i) / trans_count_bins[i])
+                                    for i in range(1, len(self.rl_authenticator.trans_count_bins))
+                    )
+
+                with open(os.path.join(self.output_dir, "perc_agreements_false_negative_bins_{}.csv".format(
+                        model_name.replace(":", "_").replace("/", "_"))), 'x') as file:
+
+                    file.writelines("{}, {}\n".format(
+                        i, get_bin_entry(model_summ.num_agreements_false_negative_bins, i) / trans_count_bins[i])
+                                    for i in range(1, len(self.rl_authenticator.trans_count_bins))
+                    )
 
         return exc_val is None
 
