@@ -27,7 +27,11 @@ from ccure_prototype.experiment_summary import ExperimentSummary
 from ccure_prototype.gui.control_frame import create_control_frame, is_control_frame_alive
 from ccure_prototype.rl_authenticator import RLAuthenticator
 from ccure_prototype.rl_authenticator import StateCreator
+from ccure_prototype.rl.always_authenticate_agent import AlwaysAuthenticateAgent
 from ccure_prototype.rl.concurrent_true_online_sarsa_lambda_agent import ConcurrentTrueOnlineSarsaLambdaAgent
+from ccure_prototype.rl.n_step_sarsa_agent import NStepSarsaAgent
+from ccure_prototype.rl.never_authenticate_agent import NeverAuthenticateAgent
+from ccure_prototype.rl.oracle_agent import OracleAgent
 from ccure_prototype.rl.sarsa_agent import SarsaAgent
 from data.features.aggregate_features import AggregateFeatures
 from data.features.apate_graph_features import ApateGraphFeatures
@@ -64,12 +68,23 @@ if __name__ == '__main__':
                         help='Train separate offline models for every random seed (otherwise, we share trained'
                              ' models across different runs with different random seeds).')
 
-    parser.add_argument('--rl-agent', dest='rl_agent', choices=['Sarsa', 'ConcurrentTrueOnlineSarsaLambda'],
-                        default='ConcurrentTrueOnlineSarsaLambda',
+    parser.add_argument('--rl-agent', dest='rl_agent',
+                        choices=[
+                            'Sarsa',
+                            'ConcurrentTrueOnlineSarsaLambda',
+                            'AlwaysAuthenticateAgent',
+                            'NeverAuthenticateAgent',
+                            'OracleAgent',
+                            'NStepSarsa_1',
+                            'NStepSarsa_2',
+                            'NStepSarsa_4',
+                            'NStepSarsa_8'
+                        ],
+                        default='NStepSarsa_4',
                         help='RL Agent to use during evaluation phase.')
 
     parser.add_argument('--cs-models-r-filepath', dest='cs_models_r_filepath',
-                        default='D:/Apps/C-Cure/Code/R/CSModels.R',
+                        default='D:/Apps/C-Cure/Code/R/optimized_CSModels.R',
                         help='Filepath to R script for Cost-Sensitive models.')
 
     parser.add_argument('--seed', dest='seed', type=int, default=None,
@@ -80,7 +95,7 @@ if __name__ == '__main__':
                              ' based on which directories for results already exist. The default behaviour may go'
                              ' wrong in cases where we start many different runs in parallel.')
 
-    parser.add_argument('--out-dir', dest='out_dir', default=os.path.join(os.path.dirname(__file__), 'results'),
+    parser.add_argument('--out-dir', dest='out_dir', default=os.path.join(os.path.dirname(__file__), 'results_test'),
                         help='Base directory for results output.')
 
     parser.add_argument('--disable-ui', dest='disable_ui', action='store_true',
@@ -733,6 +748,45 @@ if __name__ == '__main__':
                         rl_agent = ConcurrentTrueOnlineSarsaLambdaAgent(
                             num_real_actions=2, num_actions=3,
                             num_state_features=state_creator.get_num_state_features()
+                        )
+                    elif RL_AGENT == "AlwaysAuthenticateAgent":
+                        rl_agent = AlwaysAuthenticateAgent(
+                            num_actions=3,
+                            num_state_features=state_creator.get_num_state_features()
+                        )
+                    elif RL_AGENT == "NeverAuthenticateAgent":
+                        rl_agent = NeverAuthenticateAgent(
+                            num_actions=3,
+                            num_state_features=state_creator.get_num_state_features()
+                        )
+                    elif RL_AGENT == "OracleAgent":
+                        rl_agent = OracleAgent(
+                            num_actions=3,
+                            num_state_features=state_creator.get_num_state_features()
+                        )
+                    elif RL_AGENT == "NStepSarsa_1":
+                        rl_agent = NStepSarsaAgent(
+                            num_real_actions=2, num_actions=3,
+                            num_state_features=state_creator.get_num_state_features(),
+                            n=1
+                        )
+                    elif RL_AGENT == "NStepSarsa_2":
+                        rl_agent = NStepSarsaAgent(
+                            num_real_actions=2, num_actions=3,
+                            num_state_features=state_creator.get_num_state_features(),
+                            n=2
+                        )
+                    elif RL_AGENT == "NStepSarsa_4":
+                        rl_agent = NStepSarsaAgent(
+                            num_real_actions=2, num_actions=3,
+                            num_state_features=state_creator.get_num_state_features(),
+                            n=4
+                        )
+                    elif RL_AGENT == "NStepSarsa_8":
+                        rl_agent = NStepSarsaAgent(
+                            num_real_actions=2, num_actions=3,
+                            num_state_features=state_creator.get_num_state_features(),
+                            n=8
                         )
                     else:
                         print("UNKNOWN RL AGENT: ", RL_AGENT)

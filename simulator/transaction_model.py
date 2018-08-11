@@ -6,6 +6,8 @@ from mesa import Model
 from authenticators.simple_authenticators import NeverSecondAuthenticator
 from ccure_prototype.rl_authenticator import RLAuthenticator
 from ccure_prototype.rl.concurrent_true_online_sarsa_lambda_agent import ConcurrentTrueOnlineSarsaLambdaAgent
+from ccure_prototype.rl.n_step_sarsa_agent import NStepSarsaAgent
+from ccure_prototype.rl.sarsa_agent import SarsaAgent
 from simulator.customers import GenuineCustomer, FraudulentCustomer
 from datetime import timedelta
 from pytz import timezone, country_timezones
@@ -158,8 +160,10 @@ class TransactionModel(Model):
 
                 c.time_since_last_transaction += 1
             else:
-                if isinstance(self.authenticator, RLAuthenticator) \
-                        and isinstance(self.authenticator.agent, ConcurrentTrueOnlineSarsaLambdaAgent):
+                if isinstance(self.authenticator, RLAuthenticator) and \
+                        (isinstance(self.authenticator.agent, ConcurrentTrueOnlineSarsaLambdaAgent) or
+                         isinstance(self.authenticator.agent, NStepSarsaAgent) or
+                         isinstance(self.authenticator.agent, SarsaAgent)):
 
                     if self.authenticator.agent.is_card_id_known(c.card_id):
                         self.authenticator.agent.fake_learn(

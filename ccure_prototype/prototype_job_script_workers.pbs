@@ -23,7 +23,7 @@ echo hostname: $HOSTNAME
 date
 echo --- Start Job ---
 
-python -u ./ccure_prototype/run_ccure_prototype.py --cs-models-r-filepath ~/C-Cure/CSModels.R --seed $seed --run-idx $run_idx --out-dir $WORKDIR/C-Cure/results --disable-ui
+python -u ./ccure_prototype/run_ccure_prototype.py --rl-agent ConcurrentTrueOnlineSarsaLambda --cs-models-r-filepath ~/C-Cure/CSModels.R --seed $seed --run-idx $run_idx --out-dir $WORKDIR/C-Cure/results --disable-ui
 
 echo --- End Job ---
 date

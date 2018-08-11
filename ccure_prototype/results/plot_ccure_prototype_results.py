@@ -30,7 +30,10 @@ seeds_to_plot = [
     #1940194933,
 ]
 
-RL_agent_to_plot = "ConcurrentTrueOnlineSarsaLambda"
+#RL_agent_to_plot = "AlwaysAuthenticateAgent"
+#RL_agent_to_plot = "ConcurrentTrueOnlineSarsaLambda"
+#RL_agent_to_plot = "NeverAuthenticateAgent"
+RL_agent_to_plot = "OracleAgent"
 #RL_agent_to_plot = "Sarsa"
 
 # filenames (without .csv extension) for which we want to create subplots
@@ -266,8 +269,12 @@ if __name__ == '__main__':
 
     rl_agent_dirs = [os.path.join(seed_dir, RL_agent_to_plot) for seed_dir in seed_dirs]
 
-    run_dirs = [os.path.join(rl_agent_dir, run_dir)
-                for rl_agent_dir in rl_agent_dirs for run_dir in os.listdir(rl_agent_dir) if run_dir.startswith('run')]
+    run_dirs = []
+
+    for rl_agent_dir in rl_agent_dirs:
+        if os.path.isdir(rl_agent_dir):
+            run_dirs.extend([os.path.join(rl_agent_dir, run_dir)
+                             for run_dir in os.listdir(rl_agent_dir) if run_dir.startswith('run')])
 
     fig = plt.figure(figsize=(18, 9))
     fig.suptitle("C-Cure Prototype Results - {}".format(RL_agent_to_plot))
