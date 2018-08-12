@@ -269,32 +269,36 @@ class RLAuthenticator(AbstractAuthenticator):
         self.avg_reward_per_trans[transaction.CardID] = \
             ((curr_avg_card_reward * num_card_trans) + reward) / num_card_trans
 
-        if transaction.Global_Date == self.agent.get_last_date(transaction.CardID):
+        if self.agent.is_card_id_known(transaction.CardID):
+            # this should always be true, but appears to be very rarely false
+            if transaction.Global_Date == self.agent.get_last_date(transaction.CardID):
 
-            # in this case we can simply modify the most recently registered reward, we didn't learn from it yet
-            self.agent.reset_fraud_reward(card_id=transaction.CardID, reward=-state_features[1])
+                # in this case we can simply modify the most recently registered reward, we didn't learn from it yet
+                self.agent.reset_fraud_reward(card_id=transaction.CardID, reward=-state_features[1])
+            else:
+                self.agent.fake_learn(
+                    state_features=scaled_state_features,
+                    action=0,
+                    card_id=transaction.CardID,
+                    t=self.simulator.schedule.time,
+                    reward=reward
+                )
+
+                # immediately take another learning step with an inactive state,
+                # so that we can learn from the discovered fraud ASAP (don't wait until we actually reach a new state)
+                self.agent.fake_learn(
+                    state_features=self.scale_state_features(self.state_creator.compute_inactive_state(
+                        transaction.CardID,
+                        0,
+                        self
+                    )),
+                    action=2,
+                    card_id=transaction.CardID,
+                    t=self.simulator.schedule.time,
+                    reward=0.0
+                )
         else:
-            self.agent.fake_learn(
-                state_features=scaled_state_features,
-                action=0,
-                card_id=transaction.CardID,
-                t=self.simulator.schedule.time,
-                reward=reward
-            )
-
-            # immediately take another learning step with an inactive state,
-            # so that we can learn from the discovered fraud ASAP (don't wait until we actually reach a new state)
-            self.agent.fake_learn(
-                state_features=self.scale_state_features(self.state_creator.compute_inactive_state(
-                    transaction.CardID,
-                    0,
-                    self
-                )),
-                action=2,
-                card_id=transaction.CardID,
-                t=self.simulator.schedule.time,
-                reward=0.0
-            )
+            print("WARNING: cannot update fraudulent case, card ID {} not known to RL agent!".format(transaction.CardID))
 
 
 class StateCreator:
