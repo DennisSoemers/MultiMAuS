@@ -106,6 +106,8 @@ class NStepSarsaAgent:
         else:
             # not the first time we take an action for this customer, so we can take a learning step
             self.customer_data_map[card_id].last_transaction_date = transaction_date
+            self.customer_data_map[card_id].stored_option_durations[-1] = t - self.customer_data_map[card_id].tau
+            self.customer_data_map[card_id].tau = t
             self.learn(phi_prime=self.state_action_feature_vector(state_features, action), card_id=card_id, t=t)
 
         return action
@@ -205,8 +207,11 @@ class NStepSarsaAgent:
                 self.customer_data_map.pop(card_id)
 
     def register_reward(self, R, card_id):
+        if len(self.customer_data_map[card_id].stored_reward_sums) == 0:
+            # this should never happen
+            self.customer_data_map[card_id].stored_reward_sums.append(R)
+
         self.customer_data_map[card_id].stored_reward_sums[-1] += R
-        self.customer_data_map[card_id].stored_option_durations[-1] += 1
 
     def reset_fraud_reward(self, card_id, reward):
         self.customer_data_map[card_id].stored_reward_sums[-1] = reward
