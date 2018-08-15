@@ -118,7 +118,17 @@ class NStepSarsaAgent:
     def get_weights(self):
         return self.theta
 
-    def fake_learn(self, state_features, action, card_id, t, reward, terminal=False):
+    def fake_learn(self, state_features, action, card_id, t, reward, terminal=False, customer=None):
+        if terminal and customer is not None:
+            # only take the terminal learning step if there isn't another user in the system with the
+            # same card ID (happens in case of stolen card IDs)
+            if isinstance(customer, GenuineCustomer) and customer.card_stolen:
+                if card_id not in self.fraudster_stolen_ids_left:
+                    return      # fraudster who stole card didn't leave yet, so wait, don't learn
+            elif isinstance(customer, FraudulentCustomer) and customer.stole_card:
+                if card_id not in self.genuine_stolen_ids_left:
+                    return      # genuine card holder didn't leave yet, so wait, don't learn
+
         self.learn(
             phi_prime=self.state_action_feature_vector(state_features, action),
             card_id=card_id,
@@ -207,10 +217,6 @@ class NStepSarsaAgent:
                 self.customer_data_map.pop(card_id)
 
     def register_reward(self, R, card_id):
-        if len(self.customer_data_map[card_id].stored_reward_sums) == 0:
-            # this should never happen
-            self.customer_data_map[card_id].stored_reward_sums.append(R)
-
         self.customer_data_map[card_id].stored_reward_sums[-1] += R
 
     def reset_fraud_reward(self, card_id, reward):

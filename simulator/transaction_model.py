@@ -177,10 +177,11 @@ class TransactionModel(Model):
                             card_id=c.card_id,
                             t=self.schedule.time,
                             reward=0.0,
-                            terminal=True
+                            terminal=True,
+                            customer=c
                         )
 
-                self.customer_leave_callback(c.card_id, c)     # TODO final terminal state learning step
+                self.customer_leave_callback(c.card_id, c)
 
         self.pending_leave_customers = remaining_pending_leavers
 

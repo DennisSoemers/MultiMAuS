@@ -36,7 +36,7 @@ class OracleAgent:
     def get_weights(self):
         return self.theta
 
-    def fake_learn(self, state_features, action, card_id, t, reward, terminal=False):
+    def fake_learn(self, state_features, action, card_id, t, reward, terminal=False, customer=None):
         pass
 
     def is_card_id_known(self, card_id):
