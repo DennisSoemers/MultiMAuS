@@ -8,7 +8,7 @@
 #
 # run using:
 # 	--> module load worker/1.6.8-intel-2018a
-#	--> wsub -batch prototype_job_script_workers_nstepsarsa_1.pbs -data workers_data.csv -master
+#	--> wsub -batch prototype_job_script_workers_randomagent.pbs -data workers_data.csv -master
 
 module purge
 
@@ -24,7 +24,7 @@ echo hostname: $HOSTNAME
 date
 echo --- Start Job ---
 
-python -u ./ccure_prototype/run_ccure_prototype.py --rl-agent NStepSarsa_1 --cs-models-r-filepath ~/C-Cure/CSModels.R --seed $seed --run-idx $run_idx --out-dir $WORKDIR/C-Cure/results --disable-ui
+python -u ./ccure_prototype/run_ccure_prototype.py --rl-agent RandomAgent --cs-models-r-filepath ~/C-Cure/CSModels.R --seed $seed --run-idx $run_idx --out-dir $WORKDIR/C-Cure/results --disable-ui
 
 echo --- End Job ---
 date

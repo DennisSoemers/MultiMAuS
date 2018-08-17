@@ -33,7 +33,13 @@ seeds_to_plot = [
 #RL_agent_to_plot = "AlwaysAuthenticateAgent"
 #RL_agent_to_plot = "ConcurrentTrueOnlineSarsaLambda"
 #RL_agent_to_plot = "NeverAuthenticateAgent"
-RL_agent_to_plot = "OracleAgent"
+#RL_agent_to_plot = "NStepSarsa_1"
+#RL_agent_to_plot = "NStepSarsa_2"
+#RL_agent_to_plot = "NStepSarsa_4"
+#RL_agent_to_plot = "NStepSarsa_8"
+#RL_agent_to_plot = "OracleAgent"
+#RL_agent_to_plot = "Old_ConcurrentTrueOnlineSarsaLambda"
+RL_agent_to_plot = "RandomAgent"
 #RL_agent_to_plot = "Sarsa"
 
 # filenames (without .csv extension) for which we want to create subplots
@@ -73,13 +79,13 @@ files_to_plot_per_model = [
     'num_agreements_false_negative',
 ]
 
-plot_q_values = True
+plot_q_values = False
 
-plot_rl_weights = True
+plot_rl_weights = False
 
-plot_secondary_auth_percentages = True
+plot_secondary_auth_percentages = False
 
-plot_per_model_bins = True
+plot_per_model_bins = False
 
 bin_percentage_files_to_plot_per_model = [
     ('perc_true_positive_bins', 'True Positives'),

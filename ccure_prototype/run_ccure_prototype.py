@@ -32,6 +32,7 @@ from ccure_prototype.rl.concurrent_true_online_sarsa_lambda_agent import Concurr
 from ccure_prototype.rl.n_step_sarsa_agent import NStepSarsaAgent
 from ccure_prototype.rl.never_authenticate_agent import NeverAuthenticateAgent
 from ccure_prototype.rl.oracle_agent import OracleAgent
+from ccure_prototype.rl.random_agent import RandomAgent
 from ccure_prototype.rl.sarsa_agent import SarsaAgent
 from data.features.aggregate_features import AggregateFeatures
 from data.features.apate_graph_features import ApateGraphFeatures
@@ -78,7 +79,8 @@ if __name__ == '__main__':
                             'NStepSarsa_1',
                             'NStepSarsa_2',
                             'NStepSarsa_4',
-                            'NStepSarsa_8'
+                            'NStepSarsa_8',
+                            'RandomAgent'
                         ],
                         default='NStepSarsa_4',
                         help='RL Agent to use during evaluation phase.')
@@ -787,6 +789,11 @@ if __name__ == '__main__':
                             num_real_actions=2, num_actions=3,
                             num_state_features=state_creator.get_num_state_features(),
                             n=8
+                        )
+                    elif RL_AGENT == "RandomAgent":
+                        rl_agent = RandomAgent(
+                            num_actions=3,
+                            num_state_features=state_creator.get_num_state_features()
                         )
                     else:
                         print("UNKNOWN RL AGENT: ", RL_AGENT)
