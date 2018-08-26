@@ -12,7 +12,7 @@ import seaborn as sns
 from math import ceil
 
 # configuration for which we wish to plot results
-config_to_plot = 0
+config_to_plot = 1
 
 # list of all the seeds for which we wish to plot results. empty list = all seeds
 seeds_to_plot = [
@@ -31,7 +31,10 @@ seeds_to_plot = [
 ]
 
 #RL_agent_to_plot = "AlwaysAuthenticateAgent"
-#RL_agent_to_plot = "ConcurrentTrueOnlineSarsaLambda"
+RL_agent_to_plot = "ConcurrentTrueOnlineSarsaLambda"
+#RL_agent_to_plot = "ConcurrentTrueOnlineSarsaLambda_06"
+#RL_agent_to_plot = "ConcurrentTrueOnlineSarsaLambda_07"
+#RL_agent_to_plot = "ConcurrentTrueOnlineSarsaLambda_09"
 #RL_agent_to_plot = "NeverAuthenticateAgent"
 #RL_agent_to_plot = "NStepSarsa_1"
 #RL_agent_to_plot = "NStepSarsa_2"
@@ -39,7 +42,7 @@ seeds_to_plot = [
 #RL_agent_to_plot = "NStepSarsa_8"
 #RL_agent_to_plot = "OracleAgent"
 #RL_agent_to_plot = "Old_ConcurrentTrueOnlineSarsaLambda"
-RL_agent_to_plot = "RandomAgent"
+#RL_agent_to_plot = "RandomAgent"
 #RL_agent_to_plot = "Sarsa"
 
 # filenames (without .csv extension) for which we want to create subplots
@@ -106,6 +109,9 @@ def create_subfigure(fig, filename, num_cols, num_rows, subfigure_idx, run_dirs)
     for run_dir in run_dirs:
         with open(os.path.join(run_dir, "{}.csv".format(filename))) as results_file:
             lines = results_file.readlines()
+
+            if len(lines) == 0:
+                print("0 lines in file: {}".format(os.path.join(run_dir, "{}.csv".format(filename))))
 
             if len(lines) < len(timesteps):
                 # don't have as many results in this file as in some other, so need to discard some at the end

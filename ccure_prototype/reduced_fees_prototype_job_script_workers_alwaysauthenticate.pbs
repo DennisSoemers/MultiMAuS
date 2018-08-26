@@ -1,14 +1,14 @@
 #!/bin/bash -l
 
-#PBS -l walltime=20:00:00
+#PBS -l walltime=30:00:00
 #PBS -l nodes=6:ppn=6
-#PBS -l mem=25gb
+#PBS -l mem=20gb
 #PBS -l feature=intel
 #PBS -m bea
 #
 # run using:
 # 	--> module load worker/1.6.8-intel-2018a
-#	--> wsub -batch prototype_job_script_workers_neverauthenticate.pbs -data workers_data.csv -master
+#	--> wsub -batch reduced_fees_prototype_job_script_workers_alwaysauthenticate.pbs -data workers_data.csv -master
 
 module purge
 
@@ -24,7 +24,7 @@ echo hostname: $HOSTNAME
 date
 echo --- Start Job ---
 
-python -u ./ccure_prototype/run_ccure_prototype.py --rl-agent NeverAuthenticateAgent --cs-models-r-filepath ~/C-Cure/CSModels.R --seed $seed --run-idx $run_idx --out-dir $WORKDIR/C-Cure/results --disable-ui
+python -u ./ccure_prototype/run_ccure_prototype.py --flat-fee 0.01 --relative-fee 0.003 --rl-agent AlwaysAuthenticateAgent --cs-models-r-filepath ~/C-Cure/CSModels.R --seed $seed --run-idx $run_idx --out-dir $WORKDIR/C-Cure/results --disable-ui
 
 echo --- End Job ---
 date

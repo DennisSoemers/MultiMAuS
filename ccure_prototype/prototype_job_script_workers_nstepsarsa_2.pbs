@@ -1,6 +1,6 @@
 #!/bin/bash -l
 
-#PBS -l walltime=17:00:00
+#PBS -l walltime=20:00:00
 #PBS -l nodes=6:ppn=6
 #PBS -l mem=25gb
 #PBS -l feature=intel

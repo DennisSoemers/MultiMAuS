@@ -73,6 +73,9 @@ if __name__ == '__main__':
                         choices=[
                             'Sarsa',
                             'ConcurrentTrueOnlineSarsaLambda',
+                            'ConcurrentTrueOnlineSarsaLambda_06',
+                            'ConcurrentTrueOnlineSarsaLambda_07',
+                            'ConcurrentTrueOnlineSarsaLambda_09',
                             'AlwaysAuthenticateAgent',
                             'NeverAuthenticateAgent',
                             'OracleAgent',
@@ -157,7 +160,7 @@ if __name__ == '__main__':
     simulator_params = parameters.get_default_parameters()
     simulator_params['end_date'] = datetime(9999, 12, 31)
     simulator_params['stay_prob'][0] = 0.9      # stay probability for genuine customers
-    simulator_params['stay_prob'][1] = 0.99     # stay probability for fraudsters
+    simulator_params['stay_prob'][1] = 0.96     # stay probability for fraudsters
 
     if parsed_args.seed is None:
         simulator_params['seed'] = random.randrange(2**31)  # only 2^31 instead of 2^32 because R cant handle big seeds
@@ -173,7 +176,7 @@ if __name__ == '__main__':
     print("R_VERSION_BUILD: {}".format(R_VERSION_BUILD))
 
     simulator_params['num_fraudsters'] = 300
-    simulator_params['stay_prob'][0] = 0.9      # genuine
+    simulator_params['stay_prob'][0] = 0.99     # genuine
     simulator_params['stay_prob'][1] = 0.96     # fraud
 
     simulator_params['flat_fee'] = FLAT_FEE
@@ -750,6 +753,24 @@ if __name__ == '__main__':
                         rl_agent = ConcurrentTrueOnlineSarsaLambdaAgent(
                             num_real_actions=2, num_actions=3,
                             num_state_features=state_creator.get_num_state_features()
+                        )
+                    elif RL_AGENT == "ConcurrentTrueOnlineSarsaLambda_06":
+                        rl_agent = ConcurrentTrueOnlineSarsaLambdaAgent(
+                            num_real_actions=2, num_actions=3,
+                            num_state_features=state_creator.get_num_state_features(),
+                            lambda_=0.6
+                        )
+                    elif RL_AGENT == "ConcurrentTrueOnlineSarsaLambda_07":
+                        rl_agent = ConcurrentTrueOnlineSarsaLambdaAgent(
+                            num_real_actions=2, num_actions=3,
+                            num_state_features=state_creator.get_num_state_features(),
+                            lambda_=0.7
+                        )
+                    elif RL_AGENT == "ConcurrentTrueOnlineSarsaLambda_09":
+                        rl_agent = ConcurrentTrueOnlineSarsaLambdaAgent(
+                            num_real_actions=2, num_actions=3,
+                            num_state_features=state_creator.get_num_state_features(),
+                            lambda_=0.9
                         )
                     elif RL_AGENT == "AlwaysAuthenticateAgent":
                         rl_agent = AlwaysAuthenticateAgent(
